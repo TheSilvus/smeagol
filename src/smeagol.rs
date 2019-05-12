@@ -28,3 +28,15 @@ impl Smeagol {
             .map(|| "Hello!")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_index() {
+        let smeagol = crate::Smeagol::new();
+        let res = warp::test::request().path("/").reply(&smeagol.index());
+
+        assert_eq!(res.status(), 200);
+        assert_eq!(res.body(), "Hello!");
+    }
+}
