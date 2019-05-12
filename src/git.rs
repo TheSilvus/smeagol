@@ -12,7 +12,7 @@ impl GitRepository {
         })
     }
 
-    fn get_head<'repo>(&'repo self) -> Result<Commit<'repo>, GitError> {
+    fn head<'repo>(&'repo self) -> Result<Commit<'repo>, GitError> {
         // TODO create head if it does not exist
         let head_ref = self.repo.head()?;
 
@@ -21,10 +21,7 @@ impl GitRepository {
         Ok(self.repo.find_commit(head_oid).unwrap())
     }
 
-    pub fn get_item<'repo, 'path>(
-        &'repo self,
-        path: &'path [&'path [u8]],
-    ) -> Result<GitItem<'repo, 'path>, GitError> {
+    pub fn item<'repo>(&'repo self, path: Vec<Vec<u8>>) -> Result<GitItem<'repo>, GitError> {
         Ok(GitItem {
             repo: self,
             path: path,
@@ -32,27 +29,27 @@ impl GitRepository {
     }
 }
 
-pub struct GitItem<'repo, 'path> {
+pub struct GitItem<'repo> {
     repo: &'repo GitRepository,
-    path: &'path [&'path [u8]],
+    path: Vec<Vec<u8>>,
 }
-impl<'repo, 'path> GitItem<'repo, 'path> {
-    fn get_object(&self) -> Result<Object<'repo>, GitError> {
+impl<'repo> GitItem<'repo> {
+    fn object(&self) -> Result<Object<'repo>, GitError> {
         // TODO cache object
 
         if self.path.len() == 0 {
-            return Ok(self.repo.get_head()?.tree()?.into_object());
+            return Ok(self.repo.head()?.tree()?.into_object());
         }
 
         let tree = if self.path.len() == 1 {
-            self.repo.get_head()?.tree()?
+            self.repo.head()?.tree()?
         } else {
             let parent_item = GitItem {
                 repo: self.repo,
-                path: &self.path[..self.path.len()],
+                path: self.path[..self.path.len() - 1].to_vec(),
             };
 
-            let parent_object = parent_item.get_object()?;
+            let parent_object = parent_item.object()?;
             if let Ok(tree) = parent_object.into_tree() {
                 tree
             } else {
@@ -62,7 +59,7 @@ impl<'repo, 'path> GitItem<'repo, 'path> {
 
         let potential_entry = tree
             .iter()
-            .filter(|entry| entry.name_bytes() == self.path[0])
+            .filter(|entry| entry.name_bytes() == &self.path[0][..])
             .next();
         if let Some(entry) = potential_entry {
             Ok(entry.to_object(&self.repo.repo)?)
@@ -72,7 +69,7 @@ impl<'repo, 'path> GitItem<'repo, 'path> {
     }
 
     pub fn content(&self) -> Result<Vec<u8>, GitError> {
-        if let Ok(blob) = self.get_object()?.into_blob() {
+        if let Ok(blob) = self.object()?.into_blob() {
             Ok(blob.content().to_vec())
         } else {
             Err(GitError::IsDir)
