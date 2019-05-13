@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use git2::{Commit, Object, Repository};
+use git2::{Commit, ErrorCode, Object, Repository, RepositoryInitOptions, Signature};
 
 pub struct GitRepository {
     repo: Repository,
@@ -8,13 +8,39 @@ pub struct GitRepository {
 impl GitRepository {
     pub fn new<T: AsRef<Path>>(dir: T) -> Result<GitRepository, GitError> {
         Ok(GitRepository {
-            repo: Repository::open_bare(dir)?,
+            repo: Repository::init_opts(
+                dir,
+                RepositoryInitOptions::new()
+                    .bare(true)
+                    .mkdir(true)
+                    .mkpath(false),
+            )?,
         })
     }
 
     fn head<'repo>(&'repo self) -> Result<Commit<'repo>, GitError> {
-        // TODO create head if it does not exist
-        let head_ref = self.repo.head()?;
+        let head_ref = match self.repo.head() {
+            Ok(head_ref) => head_ref,
+            Err(err) => {
+                if err.code() == ErrorCode::UnbornBranch {
+                    let signature = Signature::now("smeagol", "smeagol@smeagol")?;
+                    let tree_oid = self.repo.treebuilder(None)?.write()?;
+                    let tree = self.repo.find_tree(tree_oid)?;
+                    self.repo.commit(
+                        Some("HEAD"),
+                        &signature,
+                        &signature,
+                        "Root commit",
+                        &tree,
+                        &[],
+                    )?;
+                    // We just created the head, therefore we can unwrap
+                    self.repo.head().unwrap()
+                } else {
+                    return Err(err.into());
+                }
+            }
+        };
 
         // I assume the reference given by head() is valid and a commit.
         let head_oid = head_ref.target().unwrap();
