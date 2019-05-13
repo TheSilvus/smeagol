@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use git2::{Commit, ErrorCode, Object, Repository, RepositoryInitOptions, Signature};
+use git2::{Commit, ErrorCode, Object, ObjectType, Repository, RepositoryInitOptions, Signature};
 
 pub struct GitRepository {
     repo: Repository,
@@ -102,8 +102,33 @@ impl<'repo> GitItem<'repo> {
         }
     }
 
-    // Method: canExist
-    // Method: isDir, isFile (?)
+    pub fn exists(&self) -> Result<bool, GitError> {
+        match self.object() {
+            Ok(_) => Ok(true),
+            Err(GitError::NotFound) => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
+    pub fn could_exist(&self) -> Result<bool, GitError> {
+        if self.path.len() == 0 || self.path.len() == 1 {
+            Ok(true)
+        } else {
+            let parent = self.repo.item(self.path[..self.path.len() - 1].to_vec())?;
+            if parent.exists()? && parent.is_dir()? {
+                Ok(false)
+            } else {
+                Ok(parent.could_exist()?)
+            }
+        }
+    }
+
+    pub fn is_dir(&self) -> Result<bool, GitError> {
+        Ok(self.object()?.kind() == Some(ObjectType::Tree))
+    }
+    pub fn is_file(&self) -> Result<bool, GitError> {
+        Ok(self.object()?.kind() == Some(ObjectType::Blob))
+    }
+
     // Find out: Where to put actual file editing/committing
 }
 
