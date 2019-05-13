@@ -10,13 +10,13 @@ impl Smeagol {
     }
 
     pub fn start(self) {
-        info!("Starting on 127.0.0.1:8000");
+        debug!("Starting on 127.0.0.1:8000");
 
         warp::serve(self.routes()).run(([127, 0, 0, 1], 8000));
     }
 
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
-        return self.index().or(self.get());
+        self.index().or(self.get()).with(warp::log::log("smeagol"))
     }
 
     fn index(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
@@ -35,18 +35,24 @@ impl Smeagol {
 
                 let repo = crate::GitRepository::new("repo")?;
                 let item = repo.item(path)?;
-                let content = item.content()?;
-
-                Ok(String::from_utf8_lossy(&content[..]).to_string())
-            })
-            .recover(|err: warp::Rejection| {
-                if let Some(ref err) = err.find_cause::<crate::SmeagolError>() {
-                    error!("Internal error: {}", err);
-                    Ok("An internal error occurred".to_string())
-                } else {
-                    Err(err)
+                match item.content() {
+                    Ok(content) => Ok(String::from_utf8_lossy(&content[..]).to_string()),
+                    Err(crate::git::GitError::NotFound) => Ok("Not found".to_string()),
+                    Err(err) => Err(err.into()),
                 }
             })
+            .recover(Self::recover_500())
+    }
+
+    fn recover_500() -> impl Fn(warp::Rejection) -> Result<String, warp::Rejection> + Clone {
+        |err: warp::Rejection| {
+            if let Some(ref err) = err.find_cause::<crate::SmeagolError>() {
+                error!("Internal error: {}", err);
+                Ok("An internal error occurred.".to_string())
+            } else {
+                Err(err)
+            }
+        }
     }
 
     // TODO check: can I use borrowed paths?
