@@ -4,11 +4,12 @@ extern crate pretty_env_logger;
 extern crate warp;
 
 mod smeagol;
-pub use smeagol::Smeagol;
+use smeagol::Smeagol;
 mod git;
-pub use git::GitRepository;
+use git::GitRepository;
 mod error;
-pub use error::SmeagolError;
+use error::SmeagolError;
+mod warp_helper;
 
 fn main() {
     pretty_env_logger::init_custom_env("SMEAGOL_LOG");
