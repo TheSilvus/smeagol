@@ -1,6 +1,8 @@
 extern crate git2;
 extern crate log;
 extern crate pretty_env_logger;
+#[cfg(test)]
+extern crate tempdir;
 extern crate warp;
 
 mod smeagol;

@@ -40,7 +40,7 @@ impl Smeagol {
             )
             .and_then(|path: String| -> Result<Response<String>, Rejection> {
                 // Remove leading slash
-                let path = Self::parse_path(&path[1..]);
+                let path = GitRepository::parse_path(&path);
 
                 let repo = GitRepository::new("repo")?;
                 let item = repo.item(path)?;
@@ -74,13 +74,6 @@ impl Smeagol {
                 Err(err)
             }
         }
-    }
-
-    // TODO check: can I use borrowed paths?
-    fn parse_path(path: &str) -> Vec<Vec<u8>> {
-        path.split("/")
-            .map(|s| s.bytes().collect::<Vec<_>>())
-            .collect::<Vec<_>>()
     }
 }
 
