@@ -7,6 +7,8 @@ mod smeagol;
 pub use smeagol::Smeagol;
 mod git;
 pub use git::GitRepository;
+mod error;
+pub use error::SmeagolError;
 
 fn main() {
     pretty_env_logger::init_custom_env("SMEAGOL_LOG");

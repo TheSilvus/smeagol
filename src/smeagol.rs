@@ -1,4 +1,5 @@
-use log::{debug, info};
+use log::{debug, error, info};
+
 use warp::{Filter, Reply};
 
 pub struct Smeagol {}
@@ -28,19 +29,27 @@ impl Smeagol {
                 warp::path::full()
                     .map(|fullpath: warp::filters::path::FullPath| fullpath.as_str().to_string()),
             )
-            .map(|path: String| {
+            .and_then(|path: String| -> Result<String, warp::Rejection> {
                 // Remove leading slash
                 let path = Self::parse_path(&path[1..]);
 
-                let repo = crate::GitRepository::new("repo").unwrap();
-                let item = repo.item(path).unwrap();
-                let content = item.content().unwrap();
+                let repo = crate::GitRepository::new("repo")?;
+                let item = repo.item(path)?;
+                let content = item.content()?;
 
-                String::from_utf8_lossy(&content[..]).to_string()
+                Ok(String::from_utf8_lossy(&content[..]).to_string())
+            })
+            .recover(|err: warp::Rejection| {
+                if let Some(ref err) = err.find_cause::<crate::SmeagolError>() {
+                    error!("Internal error: {}", err);
+                    Ok("An internal error occurred".to_string())
+                } else {
+                    Err(err)
+                }
             })
     }
 
-    // TODO check: can I use borrowed paths like this everywhere?
+    // TODO check: can I use borrowed paths?
     fn parse_path(path: &str) -> Vec<Vec<u8>> {
         path.split("/")
             .map(|s| s.bytes().collect::<Vec<_>>())

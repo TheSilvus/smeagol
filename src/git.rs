@@ -87,6 +87,16 @@ pub enum GitError {
     NotFound,
     IsDir,
 }
+impl std::error::Error for GitError {}
+impl std::fmt::Display for GitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            &GitError::GitError(ref err) => write!(f, "Git error: {}", err),
+            &GitError::NotFound => write!(f, "Not found"),
+            &GitError::IsDir => write!(f, "Is directory"),
+        }
+    }
+}
 impl From<git2::Error> for GitError {
     fn from(err: git2::Error) -> Self {
         GitError::GitError(err)
