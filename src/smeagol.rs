@@ -67,9 +67,12 @@ impl Smeagol {
     fn get(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         #[derive(Serialize)]
         struct TemplateGetData {
-            filename: String,
             path: String,
             content: String,
+        }
+        #[derive(Serialize)]
+        struct TemplateGetNotFoundData {
+            path: String,
         }
         warp::get2()
             .and(
@@ -81,13 +84,10 @@ impl Smeagol {
                 |path: String, templates: Arc<Handlebars>| -> Result<Response<String>, Rejection> {
                     // TODO percent decode
                     let path = GitRepository::parse_path(&path);
-                    // TODO remove unwrap
                     let path_string = path
                         .iter()
                         .map(|v| String::from_utf8_lossy(v).to_string())
                         .fold("".to_string(), |s1, s2| s1 + &s2);
-                    let filename_string =
-                        String::from_utf8_lossy(&path.last().unwrap()).to_string();
 
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path)?;
@@ -101,7 +101,6 @@ impl Smeagol {
                                         "get.html",
                                         &TemplateGetData {
                                             path: path_string,
-                                            filename: filename_string,
                                             content: String::from_utf8_lossy(&content[..])
                                                 .to_string(),
                                         },
@@ -110,9 +109,16 @@ impl Smeagol {
                             )
                             .unwrap()),
                         Err(GitError::NotFound) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Plain)
+                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(404)
-                            .body("Not found.".to_string())
+                            .body(
+                                templates
+                                    .render(
+                                        "get_not_found.html",
+                                        &TemplateGetNotFoundData { path: path_string },
+                                    )
+                                    .map_err(|err| SmeagolError::from(err))?,
+                            )
                             .unwrap()),
                         Err(err) => Err(err.into()),
                     }
