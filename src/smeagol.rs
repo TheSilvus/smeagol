@@ -13,6 +13,8 @@ use crate::git::GitError;
 use crate::warp_helper::{ContentType, ResponseBuilder};
 use crate::{GitRepository, SmeagolError};
 
+const INDEX_FILE: &'static str = "index.md";
+
 pub struct Smeagol {
     handlebars: Arc<Handlebars>,
 }
@@ -89,6 +91,13 @@ impl Smeagol {
 
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path)?;
+                    if item.is_dir()? {
+                        // TODO actual redirect
+                        return Ok(ResponseBuilder::new()
+                            .status(302)
+                            .header(warp::http::header::LOCATION, "/index.md")
+                            .body("".to_string()));
+                    }
                     match item.content() {
                         Ok(content) => Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
