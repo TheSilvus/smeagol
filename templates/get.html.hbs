@@ -1,0 +1,14 @@
+{{#> base.html}}
+
+    {{#*inline "title"}}
+        {{filename}} - Smeagol
+    {{/inline}}
+
+    {{#*inline "page"}}
+        <h1>{{path}}</h1>
+        <pre>
+{{content}}
+        </pre>
+    {{/inline}}
+
+{{/base.html}}

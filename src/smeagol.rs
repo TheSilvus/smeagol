@@ -67,6 +67,8 @@ impl Smeagol {
     fn get(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         #[derive(Serialize)]
         struct TemplateGetData {
+            filename: String,
+            path: String,
             content: String,
         }
         warp::get2()
@@ -77,20 +79,29 @@ impl Smeagol {
             .and(self.templates())
             .and_then(
                 |path: String, templates: Arc<Handlebars>| -> Result<Response<String>, Rejection> {
-                    // Remove leading slash
+                    // TODO percent decode
                     let path = GitRepository::parse_path(&path);
+                    // TODO remove unwrap
+                    let path_string = path
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v).to_string())
+                        .fold("".to_string(), |s1, s2| s1 + &s2);
+                    let filename_string =
+                        String::from_utf8_lossy(&path.last().unwrap()).to_string();
 
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path)?;
                     match item.content() {
                         Ok(content) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Plain)
+                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(200)
                             .body(
                                 templates
                                     .render(
                                         "get.html",
                                         &TemplateGetData {
+                                            path: path_string,
+                                            filename: filename_string,
                                             content: String::from_utf8_lossy(&content[..])
                                                 .to_string(),
                                         },

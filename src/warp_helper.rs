@@ -4,11 +4,13 @@ use warp::http::header::{HeaderValue, InvalidHeaderValue};
 
 pub enum ContentType {
     Plain,
+    Html,
 }
 impl ToString for ContentType {
     fn to_string(&self) -> String {
         match self {
             &ContentType::Plain => "text/plain; charset=utf-8".to_string(),
+            &ContentType::Html => "text/html; charset=utf-8".to_string(),
         }
     }
 }
