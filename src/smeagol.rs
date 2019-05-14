@@ -11,7 +11,7 @@ use warp::{Filter, Rejection, Reply};
 
 use crate::git::GitError;
 use crate::warp_helper::{ContentType, ResponseBuilder};
-use crate::{GitRepository, SmeagolError};
+use crate::{GitRepository, Path, SmeagolError};
 
 const INDEX_FILE: &'static str = "index.md";
 
@@ -83,14 +83,10 @@ impl Smeagol {
             .and_then(
                 |path: String, templates: Arc<Handlebars>| -> Result<Response<String>, Rejection> {
                     // TODO percent decode
-                    let path = GitRepository::parse_path(&path);
-                    let path_string = path
-                        .iter()
-                        .map(|v| String::from_utf8_lossy(v).to_string())
-                        .fold("".to_string(), |s1, s2| s1 + &s2);
+                    let path = Path::from(path);
 
                     let repo = GitRepository::new("repo")?;
-                    let item = repo.item(path)?;
+                    let item = repo.item(path.clone())?;
                     if item.is_dir()? {
                         // TODO actual redirect
                         return Ok(ResponseBuilder::new()
@@ -106,7 +102,7 @@ impl Smeagol {
                                 &templates,
                                 "get.html",
                                 &TemplateGetData {
-                                    path: path_string,
+                                    path: path.to_string(),
                                     content: String::from_utf8_lossy(&content[..]).to_string(),
                                 },
                             )?),
@@ -116,7 +112,9 @@ impl Smeagol {
                             .body_template(
                                 &templates,
                                 "get_not_found.html",
-                                &TemplateGetNotFoundData { path: path_string },
+                                &TemplateGetNotFoundData {
+                                    path: path.to_string(),
+                                },
                             )?),
                         Err(err) => Err(err.into()),
                     }
@@ -128,17 +126,5 @@ impl Smeagol {
         let handlebars = self.handlebars.clone();
         warp::any()
             .and_then(move || -> Result<Arc<Handlebars>, Rejection> { Ok(handlebars.clone()) })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_index() {
-        let smeagol = crate::Smeagol::new();
-        let res = warp::test::request().path("/").reply(&smeagol.index());
-
-        assert_eq!(res.status(), 200);
-        assert_eq!(res.body(), "Hello!");
     }
 }

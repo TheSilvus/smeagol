@@ -11,6 +11,8 @@ mod smeagol;
 use smeagol::Smeagol;
 mod git;
 use git::GitRepository;
+mod path;
+use path::Path;
 mod error;
 use error::SmeagolError;
 mod warp_helper;

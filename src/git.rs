@@ -1,6 +1,8 @@
+use crate::Path;
+
 use std::io;
 use std::io::Write;
-use std::path::Path;
+use std::path::Path as StdPath;
 
 use git2::{
     Commit, ErrorCode, Object, ObjectType, Oid, Repository, RepositoryInitOptions, Signature,
@@ -11,7 +13,7 @@ pub struct GitRepository {
     repo: Repository,
 }
 impl GitRepository {
-    pub fn new<T: AsRef<Path>>(dir: T) -> Result<GitRepository, GitError> {
+    pub fn new<T: AsRef<StdPath>>(dir: T) -> Result<GitRepository, GitError> {
         Ok(GitRepository {
             repo: Repository::init_opts(
                 dir,
@@ -52,47 +54,34 @@ impl GitRepository {
         Ok(self.repo.find_commit(head_oid).unwrap())
     }
 
-    pub fn item<'repo>(&'repo self, path: Vec<Vec<u8>>) -> Result<GitItem<'repo>, GitError> {
+    pub fn item<'repo>(&'repo self, path: Path) -> Result<GitItem<'repo>, GitError> {
         Ok(GitItem {
             repo: self,
             path: path,
         })
     }
-
-    // TODO make path its own type
-    pub fn parse_path(path: &str) -> Vec<Vec<u8>> {
-        if path.len() == 0 {
-            vec![]
-        } else {
-            path.split("/")
-                .map(|s| s.bytes().collect::<Vec<_>>())
-                .filter(|v| v.len() > 0)
-                .collect::<Vec<_>>()
-        }
-    }
 }
 
 pub struct GitItem<'repo> {
     repo: &'repo GitRepository,
-    path: Vec<Vec<u8>>,
+    path: Path,
 }
 impl<'repo> GitItem<'repo> {
     fn parent(&self) -> Result<GitItem<'repo>, GitError> {
-        if self.path.len() == 0 {
-            Err(GitError::NoParent)
-        } else {
-            let parent_path = self.path[..self.path.len() - 1].to_vec();
+        if let Some(parent) = self.path.parent() {
             Ok(GitItem {
                 repo: self.repo,
-                path: parent_path,
+                path: parent,
             })
+        } else {
+            Err(GitError::NoParent)
         }
     }
 
     fn object(&self) -> Result<Object<'repo>, GitError> {
         // TODO cache object
 
-        if self.path.len() == 0 {
+        if self.path.is_empty() {
             return Ok(self.repo.head()?.tree()?.into_object());
         }
 
@@ -105,7 +94,8 @@ impl<'repo> GitItem<'repo> {
 
         let potential_entry = tree
             .iter()
-            .filter(|entry| entry.name_bytes() == &self.path.last().unwrap()[..])
+            // filename cannot be empty because there is a parent.
+            .filter(|entry| entry.name_bytes() == self.path.filename().unwrap())
             .next();
         if let Some(entry) = potential_entry {
             Ok(entry.to_object(&self.repo.repo)?)
@@ -130,7 +120,7 @@ impl<'repo> GitItem<'repo> {
         }
     }
     pub fn could_exist(&self) -> Result<bool, GitError> {
-        if self.path.len() == 0 || self.path.len() == 1 {
+        if self.path.segments().count() <= 1 {
             Ok(true)
         } else {
             let parent = self.parent()?;
@@ -161,7 +151,7 @@ impl<'repo> GitItem<'repo> {
         let head_tree = head.tree()?;
         let mut tree_builder = self.repo.repo.treebuilder(Some(&head_tree))?;
 
-        self.add_to_tree(&mut tree_builder, &self.path, blob_oid)?;
+        self.add_to_tree(&mut tree_builder, self.path.clone(), blob_oid)?;
 
         let tree_oid = tree_builder.write()?;
         let new_tree = self.repo.repo.find_tree(tree_oid)?;
@@ -183,22 +173,24 @@ impl<'repo> GitItem<'repo> {
     fn add_to_tree(
         &self,
         tree: &mut TreeBuilder,
-        path: &[Vec<u8>],
+        mut path: Path,
         object: Oid,
     ) -> Result<(), GitError> {
-        assert!(path.len() > 0);
+        assert!(!path.is_empty());
 
-        if path.len() == 1 {
-            if let Some(entry) = tree.get(&path[0])? {
+        if path.segments().count() == 1 {
+            let filename = path.filename().unwrap();
+            if let Some(entry) = tree.get(filename)? {
                 if entry.kind() != Some(ObjectType::Blob) {
                     return Err(GitError::IsDir);
                 }
             }
             // TODO changeble filemode
-            tree.insert(&path[0], object, 0o100644)?;
+            tree.insert(filename, object, 0o100644)?;
             Ok(())
         } else {
-            let mut subtree_builder = if let Some(entry) = tree.get(&path[0])? {
+            let first = path.pop_first().unwrap();
+            let mut subtree_builder = if let Some(entry) = tree.get(first.bytes())? {
                 if let Some(subtree) = entry.to_object(&self.repo.repo)?.as_tree() {
                     self.repo.repo.treebuilder(Some(subtree))?
                 } else {
@@ -208,10 +200,10 @@ impl<'repo> GitItem<'repo> {
                 self.repo.repo.treebuilder(None)?
             };
 
-            self.add_to_tree(&mut subtree_builder, &path[1..], object)?;
+            self.add_to_tree(&mut subtree_builder, path, object)?;
 
             let subtree_oid = subtree_builder.write()?;
-            tree.insert(&path[0], subtree_oid, 0o040000)?;
+            tree.insert(first.bytes(), subtree_oid, 0o040000)?;
 
             Ok(())
         }
@@ -254,7 +246,7 @@ impl From<io::Error> for GitError {
 #[cfg(test)]
 mod tests {
     use crate::git::GitError;
-    use crate::GitRepository;
+    use crate::{GitRepository, Path};
     use tempdir::TempDir;
 
     #[test]
@@ -270,64 +262,11 @@ mod tests {
     }
 
     #[test]
-    fn path_parsing() {
-        assert_eq!(GitRepository::parse_path(""), Vec::<Vec<u8>>::new());
-        assert_eq!(GitRepository::parse_path("/"), Vec::<Vec<u8>>::new());
-        assert_eq!(GitRepository::parse_path("//"), Vec::<Vec<u8>>::new());
-
-        assert_eq!(
-            GitRepository::parse_path("index.md"),
-            vec!["index.md".bytes().collect::<Vec<_>>()],
-        );
-        assert_eq!(
-            GitRepository::parse_path("/index.md"),
-            vec!["index.md".bytes().collect::<Vec<_>>()],
-        );
-        assert_eq!(
-            GitRepository::parse_path("//index.md"),
-            vec!["index.md".bytes().collect::<Vec<_>>()],
-        );
-        assert_eq!(
-            GitRepository::parse_path("index.md/"),
-            vec!["index.md".bytes().collect::<Vec<_>>()],
-        );
-
-        assert_eq!(
-            GitRepository::parse_path("some/index.md"),
-            vec![
-                "some".bytes().collect::<Vec<_>>(),
-                "index.md".bytes().collect::<Vec<_>>()
-            ],
-        );
-        assert_eq!(
-            GitRepository::parse_path("/some/index.md"),
-            vec![
-                "some".bytes().collect::<Vec<_>>(),
-                "index.md".bytes().collect::<Vec<_>>()
-            ],
-        );
-        assert_eq!(
-            GitRepository::parse_path("some//index.md"),
-            vec![
-                "some".bytes().collect::<Vec<_>>(),
-                "index.md".bytes().collect::<Vec<_>>()
-            ],
-        );
-        assert_eq!(
-            GitRepository::parse_path("some/index.md/"),
-            vec![
-                "some".bytes().collect::<Vec<_>>(),
-                "index.md".bytes().collect::<Vec<_>>()
-            ],
-        );
-    }
-
-    #[test]
     fn root_always_exists() {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
-        let path = GitRepository::parse_path("");
+        let path = Path::new();
         let item = repo.item(path).unwrap();
 
         assert!(item.exists().unwrap());
@@ -340,7 +279,7 @@ mod tests {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
-        let path = GitRepository::parse_path("index.md");
+        let path = Path::from("index.md".to_string());
         let item = repo.item(path).unwrap();
 
         assert!(!item.exists().unwrap());
@@ -368,7 +307,7 @@ mod tests {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
-        let path = GitRepository::parse_path("test/index.md");
+        let path = Path::from("test/index.md".to_string());
         let item = repo.item(path).unwrap();
         let dir_item = item.parent().unwrap();
 
@@ -396,12 +335,12 @@ mod tests {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
-        let path = GitRepository::parse_path("test/index.md");
+        let path = Path::from("test/index.md".to_string());
         let item = repo.item(path).unwrap();
 
         item.edit(&vec![], "commit").unwrap();
 
-        let path2 = GitRepository::parse_path("test/index.md/something.md");
+        let path2 = Path::from("test/index.md/something.md".to_string());
         let item2 = repo.item(path2).unwrap();
         assert!(!item2.could_exist().unwrap());
 
