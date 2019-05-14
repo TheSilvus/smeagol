@@ -332,6 +332,7 @@ mod tests {
 
         assert!(item.exists().unwrap());
         assert!(item.is_dir().unwrap());
+        assert!(!item.is_file().unwrap());
     }
 
     #[test]
