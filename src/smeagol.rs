@@ -6,12 +6,11 @@ use log::{debug, error};
 
 use serde::Serialize;
 
-use warp::http::response::Builder as ResponseBuilder;
 use warp::http::Response;
 use warp::{Filter, Rejection, Reply};
 
 use crate::git::GitError;
-use crate::warp_helper::ContentType;
+use crate::warp_helper::{ContentType, ResponseBuilder};
 use crate::{GitRepository, SmeagolError};
 
 pub struct Smeagol {
@@ -52,8 +51,7 @@ impl Smeagol {
                 Ok(ResponseBuilder::new()
                     .header(warp::http::header::CONTENT_TYPE, ContentType::Plain)
                     .status(500)
-                    .body("An internal error occurred.".to_string())
-                    .unwrap())
+                    .body("An internal error occurred.".to_string()))
             } else {
                 Err(err)
             }
@@ -95,31 +93,22 @@ impl Smeagol {
                         Ok(content) => Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(200)
-                            .body(
-                                templates
-                                    .render(
-                                        "get.html",
-                                        &TemplateGetData {
-                                            path: path_string,
-                                            content: String::from_utf8_lossy(&content[..])
-                                                .to_string(),
-                                        },
-                                    )
-                                    .map_err(|err| SmeagolError::from(err))?,
-                            )
-                            .unwrap()),
+                            .body_template(
+                                &templates,
+                                "get.html",
+                                &TemplateGetData {
+                                    path: path_string,
+                                    content: String::from_utf8_lossy(&content[..]).to_string(),
+                                },
+                            )?),
                         Err(GitError::NotFound) => Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(404)
-                            .body(
-                                templates
-                                    .render(
-                                        "get_not_found.html",
-                                        &TemplateGetNotFoundData { path: path_string },
-                                    )
-                                    .map_err(|err| SmeagolError::from(err))?,
-                            )
-                            .unwrap()),
+                            .body_template(
+                                &templates,
+                                "get_not_found.html",
+                                &TemplateGetNotFoundData { path: path_string },
+                            )?),
                         Err(err) => Err(err.into()),
                     }
                 },
