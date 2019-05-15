@@ -6,7 +6,35 @@
 
     {{#*inline "page"}}
         <h1>{{path}}</h1>
-        <textarea cols="120" rows="30">{{content}}</textarea>
+        <textarea id="input-content" cols="120" rows="30">{{content}}</textarea><br>
+
+        <input id="input-commit-message" value="Edited {{path}}"><br>
+
+        <button onclick="save()">Save</button>
+
+        <script>
+            function save() {
+                let content = document.getElementById("input-content").value;
+                let commit_message = document.getElementById("input-commit-message").value;
+
+                let url = location.pathname + "?commit_message=" + commit_message;
+
+                axios.post(url, content)
+                    .then(function(response) {
+                        window.onbeforeunload = undefined;
+                        location.assign(location.pathname)
+                    })
+                    .catch(function(err) {
+                        if (err.response.status == 400) {
+                            alert(err.response.data.error);
+                        } else {
+                            console.log(err);
+                            console.log({"err": err});
+                            alert("Internal error.");
+                        }
+                    });
+            }
+        </script>
     {{/inline}}
 
 {{/base.html}}

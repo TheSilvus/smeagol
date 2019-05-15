@@ -7,7 +7,7 @@ use log::{debug, error};
 use serde::{Deserialize, Serialize};
 
 use warp::http::Response;
-use warp::{Filter, Rejection, Reply};
+use warp::{Buf, Filter, Rejection, Reply};
 
 use crate::git::GitError;
 use crate::warp_helper::{ContentType, ResponseBuilder};
@@ -40,8 +40,10 @@ impl Smeagol {
     }
 
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
-        self.index()
+        self.statics()
+            .or(self.index())
             .or(self.edit())
+            .or(self.edit_post())
             .or(self.get())
             .with(warp::log::log("smeagol"))
             .recover(Self::recover_500())
@@ -61,6 +63,12 @@ impl Smeagol {
         }
     }
 
+    fn statics(&self) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::get2()
+            .and(warp::filters::path::path("static"))
+            .and(warp::fs::dir("static/"))
+    }
+
     fn index(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         warp::path::end().map(|| "Hello!")
     }
@@ -77,14 +85,13 @@ impl Smeagol {
         }
         warp::get2()
             .and(
-                warp::path::full()
-                    .map(|fullpath: warp::filters::path::FullPath| fullpath.as_str().to_string()),
+                warp::path::full().map(|fullpath: warp::filters::path::FullPath| {
+                    Path::from_percent_encoded(fullpath.as_str().to_string().as_bytes())
+                }),
             )
             .and(self.templates())
             .and_then(
-                |path: String, templates: Arc<Handlebars>| -> Result<Response<String>, Rejection> {
-                    let path = Path::from_percent_encoded(path.as_bytes());
-
+                |path: Path, templates: Arc<Handlebars>| -> Result<Response<String>, Rejection> {
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path.clone())?;
 
@@ -147,25 +154,24 @@ impl Smeagol {
         }
         warp::get2()
             .and(
-                warp::path::full()
-                    .map(|fullpath: warp::filters::path::FullPath| fullpath.as_str().to_string()),
+                warp::path::full().map(|fullpath: warp::filters::path::FullPath| {
+                    Path::from_percent_encoded(fullpath.as_str().to_string().as_bytes())
+                }),
             )
             .and(warp::query::<QueryParameters>())
             .and(self.templates())
             .and_then(
-                |path: String,
+                |path: Path,
                  _: QueryParameters,
                  templates: Arc<Handlebars>|
                  -> Result<Response<String>, Rejection> {
-                    let path = Path::from_percent_encoded(path.as_bytes());
-
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path.clone())?;
 
                     if !item.could_exist()? {
                         return Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(404)
+                            .status(400)
                             .body_template(
                                 &templates,
                                 "edit_could_not_exist.html",
@@ -201,6 +207,60 @@ impl Smeagol {
                                     content: None,
                                 },
                             )?),
+                        Err(err) => Err(err.into()),
+                    }
+                },
+            )
+    }
+
+    fn edit_post(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+        #[derive(Deserialize)]
+        struct QueryParameters {
+            commit_message: String,
+        }
+        #[derive(Serialize)]
+        struct EditSuccessData {
+            path: String,
+        }
+        #[derive(Serialize)]
+        struct EditErrorData {
+            error: String,
+        }
+        warp::post2()
+            .and(
+                warp::path::full().map(|fullpath: warp::filters::path::FullPath| {
+                    Path::from_percent_encoded(fullpath.as_str().to_string().as_bytes())
+                }),
+            )
+            // TODO configurable upload limit
+            .and(warp::query::<QueryParameters>())
+            .and(warp::body::content_length_limit(1024 * 1024).and(warp::body::concat()))
+            .and_then(
+                |path: Path,
+                 query: QueryParameters,
+                 mut body: warp::body::FullBody|
+                 -> Result<Response<String>, Rejection> {
+                    let mut buffer = vec![0; body.remaining()];
+                    body.copy_to_slice(&mut buffer[..]);
+
+                    let repo = GitRepository::new("repo")?;
+                    let item = repo.item(path.clone())?;
+
+                    match item.edit(&buffer[..], &query.commit_message) {
+                        Ok(()) => {
+                            Ok(ResponseBuilder::new()
+                                .status(200)
+                                .body_json(&EditSuccessData {
+                                    path: path.percent_encode(),
+                                })?)
+                        }
+                        Err(GitError::NotFound) | Err(GitError::CannotCreate) => {
+                            Ok(ResponseBuilder::new()
+                                .status(400)
+                                .body_json(&EditErrorData {
+                                    error: "Could not create file at that location.".to_string(),
+                                })?)
+                        }
                         Err(err) => Err(err.into()),
                     }
                 },

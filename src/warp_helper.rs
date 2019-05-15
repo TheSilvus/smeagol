@@ -12,12 +12,14 @@ use crate::SmeagolError;
 pub enum ContentType {
     Plain,
     Html,
+    Json,
 }
 impl ToString for ContentType {
     fn to_string(&self) -> String {
         match self {
             &ContentType::Plain => "text/plain; charset=utf-8".to_string(),
             &ContentType::Html => "text/html; charset=utf-8".to_string(),
+            &ContentType::Json => "application/json".to_string(),
         }
     }
 }
@@ -72,5 +74,11 @@ impl ResponseBuilder {
                 .render(template, data)
                 .map_err(|err| SmeagolError::from(err))?,
         ))
+    }
+
+    pub fn body_json<T: Serialize>(&mut self, data: &T) -> Result<Response<String>, SmeagolError> {
+        Ok(self
+            .header(warp::http::header::CONTENT_TYPE, ContentType::Json)
+            .body(serde_json::to_string(data)?))
     }
 }

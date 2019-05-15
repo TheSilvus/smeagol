@@ -1,5 +1,7 @@
 use handlebars::{RenderError, TemplateFileError};
 
+use serde_json::Error as JsonError;
+
 use crate::git::GitError;
 
 #[derive(Debug)]
@@ -7,6 +9,7 @@ pub enum SmeagolError {
     GitError(GitError),
     TemplateFileError(TemplateFileError),
     TemplateRenderError(RenderError),
+    SerdeJsonError(JsonError),
 }
 impl std::error::Error for SmeagolError {}
 impl std::fmt::Display for SmeagolError {
@@ -17,6 +20,7 @@ impl std::fmt::Display for SmeagolError {
             &SmeagolError::TemplateRenderError(ref err) => {
                 write!(f, "Template render error: {}", err)
             }
+            &SmeagolError::SerdeJsonError(ref err) => write!(f, "Json error: {}", err),
         }
     }
 }
@@ -33,6 +37,11 @@ impl From<TemplateFileError> for SmeagolError {
 impl From<RenderError> for SmeagolError {
     fn from(err: RenderError) -> Self {
         SmeagolError::TemplateRenderError(err)
+    }
+}
+impl From<JsonError> for SmeagolError {
+    fn from(err: JsonError) -> Self {
+        SmeagolError::SerdeJsonError(err)
     }
 }
 
