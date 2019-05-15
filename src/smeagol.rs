@@ -78,6 +78,7 @@ impl Smeagol {
         #[derive(Serialize)]
         struct TemplateGetNotFoundData {
             path: String,
+            could_exist: bool,
         }
         warp::get2()
             .and(
@@ -124,6 +125,7 @@ impl Smeagol {
                                 "get_not_found.html",
                                 &TemplateGetNotFoundData {
                                     path: path.to_string(),
+                                    could_exist: item.could_exist()?,
                                 },
                             )?),
                         Err(err) => Err(err.into()),

@@ -5,7 +5,17 @@
     {{/inline}}
 
     {{#*inline "page"}}
-        Could not find {{path}}.
+        <p>
+            Could not find {{path}}.
+        </p>
+
+        <p>
+            {{#if could_exist}}
+                You can <a href="?edit">edit</a> it.
+            {{else}}
+                It could not even exist.
+            {{/if}}
+        </p>
     {{/inline}}
 
 {{/base.html}}
