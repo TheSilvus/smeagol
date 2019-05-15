@@ -124,7 +124,7 @@ impl<'repo> GitItem<'repo> {
             Ok(true)
         } else {
             let parent = self.parent()?;
-            if parent.exists()? && parent.is_dir()? {
+            if parent.exists()? && parent.is_file()? {
                 Ok(false)
             } else {
                 Ok(parent.could_exist()?)
@@ -331,7 +331,30 @@ mod tests {
     }
 
     #[test]
-    fn could_exist() {
+    fn could_exist1() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path = Path::from("index.md".to_string());
+        let item = repo.item(path).unwrap();
+
+        item.edit(&vec![], "commit").unwrap();
+
+        let path2 = Path::from("index.md/something.md".to_string());
+        let item2 = repo.item(path2).unwrap();
+        assert!(!item2.could_exist().unwrap());
+
+        match item2.content() {
+            Err(GitError::NotFound) => {}
+            _ => panic!(),
+        }
+        match item2.edit(&vec![], "commit") {
+            Err(GitError::CannotCreate) => {}
+            _ => panic!(),
+        }
+    }
+    #[test]
+    fn could_exist2() {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
