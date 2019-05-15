@@ -14,6 +14,7 @@ use crate::warp_helper::{ContentType, ResponseBuilder};
 use crate::{GitRepository, Path, SmeagolError};
 
 const INDEX_FILE: &'static str = "index.md";
+const MAX_UPLOAD_SIZE: u64 = 1024 * 1024;
 
 pub struct Smeagol {
     handlebars: Arc<Handlebars>,
@@ -234,7 +235,7 @@ impl Smeagol {
             )
             // TODO configurable upload limit
             .and(warp::query::<QueryParameters>())
-            .and(warp::body::content_length_limit(1024 * 1024).and(warp::body::concat()))
+            .and(warp::body::content_length_limit(MAX_UPLOAD_SIZE).and(warp::body::concat()))
             .and_then(
                 |path: Path,
                  query: QueryParameters,
