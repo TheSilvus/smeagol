@@ -119,7 +119,7 @@ impl<'repo> GitItem<'repo> {
             Err(err) => Err(err),
         }
     }
-    pub fn could_exist(&self) -> Result<bool, GitError> {
+    pub fn can_exist(&self) -> Result<bool, GitError> {
         if self.path.segments().count() <= 1 {
             Ok(true)
         } else {
@@ -127,7 +127,7 @@ impl<'repo> GitItem<'repo> {
             if parent.exists()? && parent.is_file()? {
                 Ok(false)
             } else {
-                Ok(parent.could_exist()?)
+                Ok(parent.can_exist()?)
             }
         }
     }
@@ -283,7 +283,7 @@ mod tests {
         let item = repo.item(path).unwrap();
 
         assert!(!item.exists().unwrap());
-        assert!(item.could_exist().unwrap());
+        assert!(item.can_exist().unwrap());
         match item.content() {
             Err(GitError::NotFound) => {}
             _ => panic!(),
@@ -313,8 +313,8 @@ mod tests {
 
         assert!(!dir_item.exists().unwrap());
         assert!(!item.exists().unwrap());
-        assert!(dir_item.could_exist().unwrap());
-        assert!(item.could_exist().unwrap());
+        assert!(dir_item.can_exist().unwrap());
+        assert!(item.can_exist().unwrap());
         match item.content() {
             Err(GitError::NotFound) => {}
             _ => panic!(),
@@ -331,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn could_exist1() {
+    fn can_exist1() {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
@@ -342,7 +342,7 @@ mod tests {
 
         let path2 = Path::from("index.md/something.md".to_string());
         let item2 = repo.item(path2).unwrap();
-        assert!(!item2.could_exist().unwrap());
+        assert!(!item2.can_exist().unwrap());
 
         match item2.content() {
             Err(GitError::NotFound) => {}
@@ -354,7 +354,7 @@ mod tests {
         }
     }
     #[test]
-    fn could_exist2() {
+    fn can_exist2() {
         let tmp = TempDir::new("smeagol").unwrap();
         let repo = GitRepository::new(tmp.path()).unwrap();
 
@@ -365,7 +365,7 @@ mod tests {
 
         let path2 = Path::from("test/index.md/something.md".to_string());
         let item2 = repo.item(path2).unwrap();
-        assert!(!item2.could_exist().unwrap());
+        assert!(!item2.can_exist().unwrap());
 
         match item2.content() {
             Err(GitError::NotFound) => {}

@@ -14,6 +14,7 @@ use crate::warp_helper::{ContentType, ResponseBuilder};
 use crate::{GitRepository, Path, SmeagolError};
 
 const INDEX_FILE: &'static str = "index.md";
+// TODO configurable upload limit
 const MAX_UPLOAD_SIZE: u64 = 1024 * 1024;
 
 pub struct Smeagol {
@@ -78,7 +79,7 @@ impl Smeagol {
         #[derive(Serialize)]
         struct TemplateGetNotFoundData {
             path: String,
-            could_exist: bool,
+            can_exist: bool,
         }
         warp::get2()
             .and(
@@ -116,7 +117,6 @@ impl Smeagol {
                                 )
                                 .body("".to_string()))
                         }
-                        // TODO allow editing if the file could exist
                         Err(GitError::NotFound) => Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(404)
@@ -125,7 +125,7 @@ impl Smeagol {
                                 "get_not_found.html",
                                 &TemplateGetNotFoundData {
                                     path: path.to_string(),
-                                    could_exist: item.could_exist()?,
+                                    can_exist: item.can_exist()?,
                                 },
                             )?),
                         Err(err) => Err(err.into()),
@@ -142,7 +142,7 @@ impl Smeagol {
             edit: String,
         }
         #[derive(Serialize)]
-        struct TemplateEditCouldNotExistData {
+        struct TemplateCannotExistData {
             path: String,
         }
         #[derive(Serialize)]
@@ -166,14 +166,14 @@ impl Smeagol {
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path.clone())?;
 
-                    if !item.could_exist()? {
+                    if !item.can_exist()? {
                         return Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(400)
                             .body_template(
                                 &templates,
-                                "edit_could_not_exist.html",
-                                &TemplateEditCouldNotExistData {
+                                "edit_cannot_exist.html",
+                                &TemplateCannotExistData {
                                     path: path.to_string(),
                                 },
                             )?);
@@ -230,7 +230,6 @@ impl Smeagol {
                     Path::from_percent_encoded(fullpath.as_str().to_string().as_bytes())
                 }),
             )
-            // TODO configurable upload limit
             .and(warp::query::<QueryParameters>())
             .and(warp::body::content_length_limit(MAX_UPLOAD_SIZE).and(warp::body::concat()))
             .and_then(
