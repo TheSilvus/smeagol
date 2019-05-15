@@ -46,7 +46,8 @@ impl Path {
     pub fn push<P: Into<Path>>(&mut self, path: P) {
         self.content.push(PATH_SEPARATOR);
         self.content.extend_from_slice(&path.into().content[..]);
-        // No normalization necessary because the pushed paths cannot start or end with slashes.
+        // Normalization is necessary because of some special cases
+        self.normalize();
     }
     pub fn pop_first(&mut self) -> Option<Path> {
         let first_separator = self.content.iter().position(|b| *b == PATH_SEPARATOR);
@@ -183,6 +184,11 @@ mod tests {
 
     #[test]
     fn push() {
+        let mut path1 = Path::new();
+        let path2 = Path::from("abc".to_string());
+        path1.push(path2);
+        assert_eq!(path1, Path::from("abc".to_string()));
+
         let mut path1 = Path::from("abc".to_string());
         let path2 = Path::from("def".to_string());
         path1.push(path2);
