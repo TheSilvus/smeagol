@@ -1,5 +1,11 @@
+use percent_encoding::define_encode_set;
+
 use std::fmt;
 use std::path::{Path as StdPath, PathBuf as StdPathBuf};
+
+define_encode_set! {
+    pub PERCENT_ENCODE_SET = [percent_encoding::DEFAULT_ENCODE_SET] | { '%' }
+}
 
 const PATH_SEPARATOR: u8 = '/' as u8;
 
@@ -12,6 +18,13 @@ impl Path {
     pub fn new() -> Path {
         Self::from_vec(vec![])
     }
+    pub fn from_percent_encoded(s: &[u8]) -> Path {
+        Self::from_vec(percent_encoding::percent_decode(s).collect::<Vec<_>>())
+    }
+    pub fn percent_encode(&self) -> String {
+        percent_encoding::percent_encode(&self.content[..], PERCENT_ENCODE_SET).to_string()
+    }
+
     fn from_vec(content: Vec<u8>) -> Path {
         let mut path = Path { content };
         path.normalize();

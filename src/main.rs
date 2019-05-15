@@ -1,6 +1,7 @@
 extern crate git2;
 extern crate handlebars;
 extern crate log;
+extern crate percent_encoding;
 extern crate pretty_env_logger;
 extern crate serde;
 #[cfg(test)]
