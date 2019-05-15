@@ -166,7 +166,7 @@ impl Smeagol {
                     let repo = GitRepository::new("repo")?;
                     let item = repo.item(path.clone())?;
 
-                    if !item.can_exist()? {
+                    if !item.can_exist()? || (item.exists()? && item.is_dir()?) {
                         return Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(400)
