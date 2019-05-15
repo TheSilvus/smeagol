@@ -13,6 +13,10 @@
         <button onclick="save()">Save</button>
 
         <script>
+            window.onbeforeunload = function() {
+                return true;
+            }   
+
             function save() {
                 let content = document.getElementById("input-content").value;
                 let commit_message = document.getElementById("input-commit-message").value;
