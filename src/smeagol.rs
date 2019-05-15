@@ -42,7 +42,6 @@ impl Smeagol {
 
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         self.statics()
-            .or(self.index())
             .or(self.edit())
             .or(self.edit_post())
             .or(self.get())
@@ -68,10 +67,6 @@ impl Smeagol {
         warp::get2()
             .and(warp::filters::path::path("static"))
             .and(warp::fs::dir("static/"))
-    }
-
-    fn index(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
-        warp::path::end().map(|| "Hello!")
     }
 
     fn get(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
