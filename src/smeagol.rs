@@ -11,7 +11,7 @@ use warp::{Buf, Filter, Rejection, Reply};
 
 use crate::git::GitError;
 use crate::warp_helper::{ContentType, ResponseBuilder};
-use crate::{GitRepository, Path, SmeagolError};
+use crate::{GitRepository, Path, PathStringBuilder, SmeagolError};
 
 const INDEX_FILE: &'static str = "index.md";
 // TODO configurable upload limit
@@ -45,6 +45,7 @@ impl Smeagol {
         self.statics()
             .or(self.edit())
             .or(self.edit_post())
+            .or(self.list())
             .or(self.get())
             .with(warp::log::log("smeagol"))
             .recover(Self::recover_500())
@@ -107,6 +108,8 @@ impl Smeagol {
                                 },
                             )?),
                         Err(GitError::IsDir) => {
+                            // TODO refactor with PathStringBuilder in mind (other locations as
+                            // well)
                             let mut redirect_path = path;
                             redirect_path.push(INDEX_FILE.to_string());
                             Ok(ResponseBuilder::new()
@@ -251,13 +254,114 @@ impl Smeagol {
                                     path: path.percent_encode(),
                                 })?)
                         }
-                        Err(GitError::NotFound) | Err(GitError::CannotCreate) => {
-                            Ok(ResponseBuilder::new()
-                                .status(400)
-                                .body_json(&EditErrorData {
-                                    error: "Could not create file at that location.".to_string(),
-                                })?)
-                        }
+                        Err(GitError::CannotCreate) => Ok(ResponseBuilder::new()
+                            .status(400)
+                            .body_json(&EditErrorData {
+                                error: "Could not create file at that location.".to_string(),
+                            })?),
+                        Err(err) => Err(err.into()),
+                    }
+                },
+            )
+    }
+    fn list(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+        #[derive(Deserialize)]
+        struct QueryParameters {
+            // This field is never accessed but is required for the tag
+            #[allow(dead_code)]
+            list: String,
+        }
+        #[derive(Serialize)]
+        struct TemplateListData {
+            path: String,
+            children: Vec<TemplateListChildData>,
+        }
+        #[derive(Serialize)]
+        struct TemplateListChildData {
+            link: String,
+            name: String,
+        }
+        #[derive(Serialize)]
+        struct TemplateListNotFoundData {
+            path: String,
+        }
+        warp::get2()
+            .and(
+                warp::path::full().map(|fullpath: warp::filters::path::FullPath| {
+                    Path::from_percent_encoded(fullpath.as_str().to_string().as_bytes())
+                }),
+            )
+            .and(warp::query::<QueryParameters>())
+            .and(self.templates())
+            .and_then(
+                |path: Path,
+                 _: QueryParameters,
+                 templates: Arc<Handlebars>|
+                 -> Result<Response<String>, Rejection> {
+                    let repo = GitRepository::new("repo")?;
+                    let item = repo.item(path.clone())?;
+
+                    match item.list() {
+                        Ok(items) => Ok(ResponseBuilder::new()
+                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+                            .status(200)
+                            .body_template(
+                                &templates,
+                                "list.html",
+                                &TemplateListData {
+                                    path: PathStringBuilder::new(path)
+                                        .dir(true)
+                                        .build_percent_encode(),
+                                    // TODO remove clone
+                                    children: items
+                                        .iter()
+                                        .map(|item| -> Result<TemplateListChildData, GitError> {
+                                            let link = if item.is_dir()? {
+                                                format!(
+                                                    "{}?list",
+                                                    PathStringBuilder::new(item.path().clone())
+                                                        .root(true)
+                                                        .build_percent_encode()
+                                                )
+                                            } else {
+                                                PathStringBuilder::new(item.path().clone())
+                                                    .root(true)
+                                                    .build_percent_encode()
+                                            };
+                                            Ok(TemplateListChildData {
+                                                link: link,
+                                                name: PathStringBuilder::new(
+                                                    // A child of something has to have a filename
+                                                    item.path().filename().unwrap(),
+                                                )
+                                                .dir(item.is_dir()?)
+                                                .build_lossy(),
+                                            })
+                                        })
+                                        .collect::<Result<Vec<_>, _>>()?,
+                                },
+                            )?),
+                        Err(GitError::NotFound) => Ok(ResponseBuilder::new()
+                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+                            .status(200)
+                            .body_template(
+                                &templates,
+                                "list_not_found.html",
+                                &TemplateListNotFoundData {
+                                    path: PathStringBuilder::new(path)
+                                        .dir(true)
+                                        .build_percent_encode(),
+                                },
+                            )?),
+                        Err(GitError::IsFile) => Ok(ResponseBuilder::new()
+                            .status(302)
+                            .header(
+                                warp::http::header::LOCATION,
+                                PathStringBuilder::new(path)
+                                    .root(true)
+                                    .build_percent_encode(),
+                            )
+                            .body("".to_string())),
                         Err(err) => Err(err.into()),
                     }
                 },

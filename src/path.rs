@@ -76,12 +76,12 @@ impl Path {
         index
     }
 
-    pub fn filename(&self) -> Option<&[u8]> {
+    pub fn filename(&self) -> Option<Path> {
         let index = self.last_separator();
         if let Some(index) = index {
-            Some(&self.content[index + 1..])
+            Some(Path::from_vec(self.content[index + 1..].to_vec()))
         } else if self.content.len() > 0 {
-            Some(&self.content[..])
+            Some(Path::from_vec(self.content[..].to_vec()))
         } else {
             None
         }
@@ -142,6 +142,56 @@ impl From<&Path> for StdPathBuf {
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", String::from_utf8_lossy(&self.content[..]))
+    }
+}
+
+pub struct PathStringBuilder {
+    path: Path,
+
+    root: bool,
+    dir: bool,
+}
+impl PathStringBuilder {
+    pub fn new(path: Path) -> PathStringBuilder {
+        PathStringBuilder {
+            path,
+            root: false,
+            dir: false,
+        }
+    }
+
+    pub fn root(&mut self, root: bool) -> &mut PathStringBuilder {
+        self.root = root;
+        self
+    }
+    pub fn dir(&mut self, dir: bool) -> &mut PathStringBuilder {
+        self.dir = dir;
+        self
+    }
+
+    pub fn build_lossy(&self) -> String {
+        let mut s = String::new();
+        if self.root {
+            s.push('/');
+        }
+        s += &self.path.to_string();
+        if self.dir {
+            s.push('/');
+        }
+
+        s
+    }
+    pub fn build_percent_encode(&self) -> String {
+        let mut s = String::new();
+        if self.root {
+            s.push('/');
+        }
+        s += &self.path.percent_encode();
+        if self.dir {
+            s.push('/');
+        }
+
+        s
     }
 }
 
@@ -231,15 +281,9 @@ mod tests {
         assert_eq!(path.filename(), None);
 
         let path = Path::from("abc".to_string());
-        assert_eq!(
-            path.filename(),
-            Some(&"abc".bytes().collect::<Vec<_>>()[..])
-        );
+        assert_eq!(path.filename(), Some(Path::from("abc".to_string())));
 
         let path = Path::from("abc/def".to_string());
-        assert_eq!(
-            path.filename(),
-            Some(&"def".bytes().collect::<Vec<_>>()[..])
-        );
+        assert_eq!(path.filename(), Some(Path::from("def".to_string())));
     }
 }

@@ -67,6 +67,10 @@ pub struct GitItem<'repo> {
     path: Path,
 }
 impl<'repo> GitItem<'repo> {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     fn parent(&self) -> Result<GitItem<'repo>, GitError> {
         if let Some(parent) = self.path.parent() {
             Ok(GitItem {
@@ -95,7 +99,7 @@ impl<'repo> GitItem<'repo> {
         let potential_entry = tree
             .iter()
             // filename cannot be empty because there is a parent.
-            .filter(|entry| entry.name_bytes() == self.path.filename().unwrap())
+            .filter(|entry| entry.name_bytes() == self.path.filename().unwrap().bytes())
             .next();
         if let Some(entry) = potential_entry {
             Ok(entry.to_object(&self.repo.repo)?)
@@ -109,6 +113,21 @@ impl<'repo> GitItem<'repo> {
             Ok(blob.content().to_vec())
         } else {
             Err(GitError::IsDir)
+        }
+    }
+
+    pub fn list(&self) -> Result<Vec<GitItem>, GitError> {
+        if let Ok(tree) = self.object()?.into_tree() {
+            let mut items = vec![];
+            for entry in tree.iter() {
+                let mut path = self.path.clone();
+                path.push(entry.name_bytes().to_vec());
+                items.push(self.repo.item(path)?);
+            }
+
+            Ok(items)
+        } else {
+            Err(GitError::IsFile)
         }
     }
 
@@ -180,13 +199,13 @@ impl<'repo> GitItem<'repo> {
 
         if path.segments().count() == 1 {
             let filename = path.filename().unwrap();
-            if let Some(entry) = tree.get(filename)? {
+            if let Some(entry) = tree.get(filename.bytes())? {
                 if entry.kind() != Some(ObjectType::Blob) {
                     return Err(GitError::IsDir);
                 }
             }
             // TODO changeble filemode
-            tree.insert(filename, object, 0o100644)?;
+            tree.insert(filename.bytes(), object, 0o100644)?;
             Ok(())
         } else {
             let first = path.pop_first().unwrap();
@@ -217,6 +236,7 @@ pub enum GitError {
     NotFound,
     NoParent,
     IsDir,
+    IsFile,
     CannotCreate,
 }
 impl std::error::Error for GitError {}
@@ -228,6 +248,7 @@ impl std::fmt::Display for GitError {
             &GitError::NotFound => write!(f, "Not found"),
             &GitError::NoParent => write!(f, "No parent"),
             &GitError::IsDir => write!(f, "Is directory"),
+            &GitError::IsFile => write!(f, "Is file"),
             &GitError::CannotCreate => write!(f, "Cannot create file at that location"),
         }
     }
