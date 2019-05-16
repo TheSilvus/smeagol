@@ -1,3 +1,5 @@
+use std::fmt;
+
 use handlebars::Handlebars;
 
 use serde::Serialize;
@@ -14,12 +16,12 @@ pub enum ContentType {
     Html,
     Json,
 }
-impl ToString for ContentType {
-    fn to_string(&self) -> String {
+impl fmt::Display for ContentType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ContentType::Plain => "text/plain; charset=utf-8".to_string(),
-            &ContentType::Html => "text/html; charset=utf-8".to_string(),
-            &ContentType::Json => "application/json".to_string(),
+            &ContentType::Plain => write!(f, "text/plain; charset=utf-8"),
+            &ContentType::Html => write!(f, "text/html; charset=utf-8"),
+            &ContentType::Json => write!(f, "application/json"),
         }
     }
 }
