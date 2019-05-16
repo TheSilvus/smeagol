@@ -5,7 +5,11 @@
     {{/inline}}
 
     {{#*inline "page"}}
-        <h1>Listing {{path}}</h1>
+        <h1>{{path}}</h1>
+
+        {{#if parent_list_link}}
+            <a href="{{parent_list_link}}">Parent</a>
+        {{/if}}
 
         <ul>
             {{#each children}}

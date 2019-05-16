@@ -75,6 +75,7 @@ impl Smeagol {
         #[derive(Serialize)]
         struct TemplateGetData {
             path: String,
+            parent_list_link: String,
             content: String,
         }
         #[derive(Serialize)]
@@ -103,6 +104,13 @@ impl Smeagol {
                                 "get.html",
                                 &TemplateGetData {
                                     path: path.to_string(),
+                                    // File path has to have parent
+                                    parent_list_link: format!(
+                                        "{}?list",
+                                        PathStringBuilder::new(path.parent().unwrap(),)
+                                            .root(true)
+                                            .build_percent_encode()
+                                    ),
                                     // TODO handle non-utf content
                                     content: String::from_utf8_lossy(&content[..]).to_string(),
                                 },
@@ -274,6 +282,7 @@ impl Smeagol {
         #[derive(Serialize)]
         struct TemplateListData {
             path: String,
+            parent_list_link: Option<String>,
             children: Vec<TemplateListChildData>,
         }
         #[derive(Serialize)]
@@ -309,10 +318,17 @@ impl Smeagol {
                                 &templates,
                                 "list.html",
                                 &TemplateListData {
-                                    path: PathStringBuilder::new(path)
+                                    path: PathStringBuilder::new(path.clone())
                                         .dir(true)
                                         .build_percent_encode(),
-                                    // TODO remove clone
+                                    parent_list_link: path.clone().parent().map(|path| {
+                                        format!(
+                                            "{}?list",
+                                            PathStringBuilder::new(path)
+                                                .root(true)
+                                                .build_percent_encode()
+                                        )
+                                    }),
                                     children: items
                                         .iter()
                                         .map(|item| -> Result<TemplateListChildData, GitError> {
