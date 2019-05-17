@@ -3,20 +3,3 @@
 
 /repo
 /repo-debug
-
-
-#Added by cargo
-#
-#already existing elements are commented out
-
-#/target
-#**/*.rs.bk
-Cargo.lock
-
-
-#Added by cargo
-#
-#already existing elements are commented out
-
-#/target
-#**/*.rs.bk
