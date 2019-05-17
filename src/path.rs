@@ -8,6 +8,7 @@ define_encode_set! {
 }
 
 const PATH_SEPARATOR: u8 = '/' as u8;
+const EXTENSION_SEPARATOR: u8 = '.' as u8;
 
 // TODO I could add a separate referencetype for this structure
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +95,25 @@ impl Path {
             Some(Path::from(self.content[0..index].to_vec()))
         } else if !self.is_empty() {
             Some(Path::new())
+        } else {
+            None
+        }
+    }
+
+    // TODO rewrite this with slice return value
+    pub fn extension(&self) -> Option<Vec<u8>> {
+        if let Some(filename) = self.filename() {
+            assert!(filename.bytes().len() > 0);
+
+            for (i, c) in filename.bytes().iter().enumerate() {
+                if i == 0 && *c == EXTENSION_SEPARATOR {
+                    continue;
+                } else if *c == EXTENSION_SEPARATOR {
+                    return Some(filename.bytes()[i + 1..].to_vec());
+                }
+            }
+
+            None
         } else {
             None
         }
@@ -285,5 +305,26 @@ mod tests {
 
         let path = Path::from("abc/def".to_string());
         assert_eq!(path.filename(), Some(Path::from("def".to_string())));
+    }
+
+    #[test]
+    fn extension() {
+        let path = Path::from("".to_string());
+        assert_eq!(path.extension(), None);
+
+        let path = Path::from("abc".to_string());
+        assert_eq!(path.extension(), None);
+
+        let path = Path::from(".abc".to_string());
+        assert_eq!(path.extension(), None);
+
+        let path = Path::from("a.abc".to_string());
+        assert_eq!(path.extension(), Some("abc".to_string().into_bytes()));
+
+        let path = Path::from(".a.abc".to_string());
+        assert_eq!(path.extension(), Some("abc".to_string().into_bytes()));
+
+        let path = Path::from("a.abc.def".to_string());
+        assert_eq!(path.extension(), Some("abc.def".to_string().into_bytes()));
     }
 }
