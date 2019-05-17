@@ -11,7 +11,7 @@ use warp::{Buf, Filter, Rejection, Reply};
 
 use crate::git::GitError;
 use crate::warp_helper::{ContentType, ResponseBuilder};
-use crate::{GitRepository, Path, PathStringBuilder, SmeagolError};
+use crate::{Filetype, GitRepository, Path, PathStringBuilder, SmeagolError};
 
 const INDEX_FILE: &'static str = "index.md";
 // TODO configurable upload limit
@@ -77,6 +77,7 @@ impl Smeagol {
             path: String,
             parent_list_link: String,
             content: String,
+            safe: bool,
         }
         #[derive(Serialize)]
         struct TemplateGetNotFoundData {
@@ -96,25 +97,33 @@ impl Smeagol {
                     let item = repo.item(path.clone())?;
 
                     match item.content() {
-                        Ok(content) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(200)
-                            .body_template(
-                                &templates,
-                                "get.html",
-                                &TemplateGetData {
-                                    path: path.to_string(),
-                                    // File path has to have parent
-                                    parent_list_link: format!(
-                                        "{}?list",
-                                        PathStringBuilder::new(path.parent().unwrap(),)
-                                            .root(true)
-                                            .build_percent_encode()
-                                    ),
-                                    // TODO handle non-utf content
-                                    content: String::from_utf8_lossy(&content[..]).to_string(),
-                                },
-                            )?),
+                        Ok(content) => {
+                            let filetype = Filetype::from(&path);
+                            Ok(ResponseBuilder::new()
+                                .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+                                .status(200)
+                                .body_template(
+                                    &templates,
+                                    "get.html",
+                                    &TemplateGetData {
+                                        path: path.to_string(),
+                                        // File path has to have parent
+                                        parent_list_link: format!(
+                                            "{}?list",
+                                            PathStringBuilder::new(path.parent().unwrap(),)
+                                                .root(true)
+                                                .build_percent_encode()
+                                        ),
+                                        // TODO handle non-utf content
+                                        content: filetype
+                                            .parse(
+                                                &String::from_utf8_lossy(&content[..]).to_string(),
+                                            )
+                                            .map_err(|err| SmeagolError::from(err))?,
+                                        safe: filetype.is_safe(),
+                                    },
+                                )?)
+                        }
                         Err(GitError::IsDir) => {
                             // TODO refactor with PathStringBuilder in mind (other locations as
                             // well)

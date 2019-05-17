@@ -1,3 +1,4 @@
+extern crate comrak;
 extern crate git2;
 extern crate handlebars;
 extern crate log;
@@ -11,6 +12,9 @@ extern crate warp;
 
 mod smeagol;
 use smeagol::Smeagol;
+
+mod filetype;
+use filetype::Filetype;
 mod git;
 use git::GitRepository;
 mod path;

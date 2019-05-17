@@ -10,9 +10,15 @@
         <a href="?edit">Edit</a>
         <a href="{{parent_list_link}}">List parent</a>
 
-        <pre>
+        <hr>
+
+        {{#if safe}}
+            <div>{{{content}}}</div>
+        {{else}}
+            <pre>
 {{content}}
-        </pre>
+            </pre>
+        {{/if}}
     {{/inline}}
 
 {{/base.html}}
