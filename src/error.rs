@@ -4,12 +4,15 @@ use serde_json::Error as JsonError;
 
 use std::fmt;
 
+use crate::config::ConfigError;
 use crate::filetype::ParsingError;
 use crate::git::GitError;
 
+// TODO remove Error suffix for all error enums
 #[derive(Debug)]
 pub enum SmeagolError {
     GitError(GitError),
+    ConfigError(ConfigError),
     TemplateFileError(TemplateFileError),
     TemplateRenderError(RenderError),
     SerdeJsonError(JsonError),
@@ -20,6 +23,7 @@ impl fmt::Display for SmeagolError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &SmeagolError::GitError(ref err) => write!(f, "Git error: {}", err),
+            &SmeagolError::ConfigError(ref err) => write!(f, "Config error: {}", err),
             &SmeagolError::TemplateFileError(ref err) => write!(f, "Template file error: {}", err),
             &SmeagolError::TemplateRenderError(ref err) => {
                 write!(f, "Template render error: {}", err)
@@ -32,6 +36,11 @@ impl fmt::Display for SmeagolError {
 impl From<GitError> for SmeagolError {
     fn from(err: GitError) -> Self {
         SmeagolError::GitError(err)
+    }
+}
+impl From<ConfigError> for SmeagolError {
+    fn from(err: ConfigError) -> Self {
+        SmeagolError::ConfigError(err)
     }
 }
 impl From<TemplateFileError> for SmeagolError {

@@ -11,20 +11,19 @@ use warp::{Buf, Filter, Rejection, Reply};
 
 use crate::git::GitError;
 use crate::warp_helper::{ContentType, ResponseBuilder};
-use crate::{Filetype, GitRepository, Path, PathStringBuilder, SmeagolError};
-
-const INDEX_FILE: &'static str = "index.md";
-// TODO configurable upload limit
-const MAX_UPLOAD_SIZE: u64 = 1024 * 1024;
+use crate::{Config, Filetype, GitRepository, Path, PathStringBuilder, SmeagolError};
 
 pub struct Smeagol {
     handlebars: Arc<Handlebars>,
+    config: Arc<Config>,
 }
 impl Smeagol {
     pub fn new() -> Result<Smeagol, SmeagolError> {
         debug!("Initializing");
         Ok(Smeagol {
             handlebars: Arc::new(Self::initialize_handlebars()?),
+            // TODO path from env variable?
+            config: Arc::new(Config::load("Smeagol.toml")?),
         })
     }
     fn initialize_handlebars() -> Result<Handlebars, SmeagolError> {
@@ -36,9 +35,15 @@ impl Smeagol {
     }
 
     pub fn start(self) {
-        debug!("Starting on 127.0.0.1:8000");
-
-        warp::serve(self.routes()).run(([127, 0, 0, 1], 8000));
+        use std::net::ToSocketAddrs;
+        warp::serve(self.routes()).run(
+            self.config
+                .bind
+                .to_socket_addrs()
+                .expect("Unable to parse socket address")
+                .next()
+                .expect("Unable to parse socket address"),
+        );
     }
 
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
@@ -91,9 +96,13 @@ impl Smeagol {
                 }),
             )
             .and(self.templates())
+            .and(self.config())
             .and_then(
-                |path: Path, templates: Arc<Handlebars>| -> Result<Response<String>, Rejection> {
-                    let repo = GitRepository::new("repo")?;
+                |path: Path,
+                 templates: Arc<Handlebars>,
+                 config: Arc<Config>|
+                 -> Result<Response<String>, Rejection> {
+                    let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
                     match item.content() {
@@ -128,7 +137,7 @@ impl Smeagol {
                             // TODO refactor with PathStringBuilder in mind (other locations as
                             // well)
                             let mut redirect_path = path;
-                            redirect_path.push(INDEX_FILE.to_string());
+                            redirect_path.push(config.index.to_string());
                             Ok(ResponseBuilder::new()
                                 .status(302)
                                 .header(
@@ -178,12 +187,14 @@ impl Smeagol {
             )
             .and(warp::query::<QueryParameters>())
             .and(self.templates())
+            .and(self.config())
             .and_then(
                 |path: Path,
                  _: QueryParameters,
-                 templates: Arc<Handlebars>|
+                 templates: Arc<Handlebars>,
+                 config: Arc<Config>|
                  -> Result<Response<String>, Rejection> {
-                    let repo = GitRepository::new("repo")?;
+                    let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
                     if !item.can_exist()? || (item.exists()? && item.is_dir()?) {
@@ -251,16 +262,21 @@ impl Smeagol {
                 }),
             )
             .and(warp::query::<QueryParameters>())
-            .and(warp::body::content_length_limit(MAX_UPLOAD_SIZE).and(warp::body::concat()))
+            .and(self.config())
+            .and(
+                warp::body::content_length_limit(self.config.max_upload_size)
+                    .and(warp::body::concat()),
+            )
             .and_then(
                 |path: Path,
                  query: QueryParameters,
+                 config: Arc<Config>,
                  mut body: warp::body::FullBody|
                  -> Result<Response<String>, Rejection> {
                     let mut buffer = vec![0; body.remaining()];
                     body.copy_to_slice(&mut buffer[..]);
 
-                    let repo = GitRepository::new("repo")?;
+                    let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
                     match item.edit(&buffer[..], &query.commit_message) {
@@ -311,12 +327,14 @@ impl Smeagol {
             )
             .and(warp::query::<QueryParameters>())
             .and(self.templates())
+            .and(self.config())
             .and_then(
                 |path: Path,
                  _: QueryParameters,
-                 templates: Arc<Handlebars>|
+                 templates: Arc<Handlebars>,
+                 config: Arc<Config>|
                  -> Result<Response<String>, Rejection> {
-                    let repo = GitRepository::new("repo")?;
+                    let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
                     match item.list() {
@@ -397,5 +415,9 @@ impl Smeagol {
         let handlebars = self.handlebars.clone();
         warp::any()
             .and_then(move || -> Result<Arc<Handlebars>, Rejection> { Ok(handlebars.clone()) })
+    }
+    fn config(&self) -> impl Filter<Extract = (Arc<Config>,), Error = Rejection> + Clone {
+        let config = self.config.clone();
+        warp::any().and_then(move || -> Result<Arc<Config>, Rejection> { Ok(config.clone()) })
     }
 }

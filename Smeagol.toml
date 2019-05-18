@@ -1,0 +1,6 @@
+bind = "127.0.0.1:8000"
+
+index = "index.md"
+max_upload_size = 1_000_000
+
+repo = "repo/"

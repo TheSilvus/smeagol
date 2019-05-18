@@ -8,11 +8,14 @@ extern crate serde;
 extern crate serde_json;
 #[cfg(test)]
 extern crate tempdir;
+extern crate toml;
 extern crate warp;
 
 mod smeagol;
 use smeagol::Smeagol;
 
+mod config;
+use config::Config;
 mod filetype;
 use filetype::Filetype;
 mod git;
@@ -26,6 +29,7 @@ mod warp_helper;
 fn main() {
     pretty_env_logger::init_custom_env("SMEAGOL_LOG");
 
+    // TODO graceful error handling on configerror
     let smeagol = Smeagol::new().expect("Unable to initialize Smeagol");
     smeagol.start();
 }
