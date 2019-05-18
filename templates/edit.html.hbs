@@ -6,11 +6,14 @@
 
     {{#*inline "page"}}
         <h1>{{path}}</h1>
-        <textarea id="input-content" cols="120" rows="30">{{content}}</textarea><br>
+        <textarea id="input-content" cols="120" rows="30">{{content}}</textarea> <br>
 
-        <input id="input-commit-message" value="Edited {{path}}"><br>
+        <input id="input-commit-message" value="Edited {{path}}"> <br>
+
+        <input id="file-upload" type="file"> <button onclick="upload()">Upload</button> <br>
 
         <button onclick="save()">Save</button>
+        <button onclick="discard()">Discard</button>
 
         <script>
             window.onbeforeunload = function() {
@@ -21,14 +24,38 @@
                 let content = document.getElementById("input-content").value;
                 let commit_message = document.getElementById("input-commit-message").value;
 
-                let url = location.pathname + "?commit_message=" + commit_message;
+                postFile(location.pathname, commit_message, content);
+            }
 
-                axios.post(url, content)
+            function upload() {
+                let files = document.getElementById("file-upload").files;
+                if (files.length == 0) {
+                    alert("No file selected.");
+                    return;
+                }
+
+                let file = files[0];
+                // TODO use value from config here
+                if (file.size > 1000000) {
+                    alert("The file is too big.");
+                    return;
+                }
+
+                let commit_message = document.getElementById("input-commit-message").value;
+
+                postFile(location.pathname, commit_message, file);
+            }
+
+            function postFile(url, message, content) {
+                url += "?commit_message=" + message;
+
+                return axios.post(url, content)
                     .then(function(response) {
                         window.onbeforeunload = undefined;
-                        location.assign(location.pathname)
+                        location.assign(response.data.path);
                     })
                     .catch(function(err) {
+                        console.log({"err": err});
                         if (err.response.status == 400) {
                             alert(err.response.data.error);
                         } else {
@@ -37,6 +64,10 @@
                             alert("Internal error.");
                         }
                     });
+            }
+
+            function discard() {
+                location.assign(location.pathname);
             }
         </script>
     {{/inline}}
