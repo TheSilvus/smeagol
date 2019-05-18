@@ -202,7 +202,8 @@ impl Smeagol {
         #[derive(Serialize)]
         struct TemplateEditData {
             path: String,
-            content: Option<String>,
+            content: String,
+            is_valid: bool,
         }
         warp::get2()
             .and(
@@ -236,17 +237,21 @@ impl Smeagol {
                     }
 
                     match item.content() {
-                        Ok(content) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(200)
-                            .body_template(
-                                &templates,
-                                "edit.html",
-                                &TemplateEditData {
-                                    path: path.to_string(),
-                                    content: String::from_utf8(content).ok(),
-                                },
-                            )?),
+                        Ok(content) => {
+                            let parsed_content = String::from_utf8(content);
+                            Ok(ResponseBuilder::new()
+                                .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+                                .status(200)
+                                .body_template(
+                                    &templates,
+                                    "edit.html",
+                                    &TemplateEditData {
+                                        path: path.to_string(),
+                                        is_valid: parsed_content.is_ok(),
+                                        content: parsed_content.unwrap_or("".to_string()),
+                                    },
+                                )?)
+                        }
                         Err(GitError::NotFound) => Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
                             .status(200)
@@ -255,7 +260,8 @@ impl Smeagol {
                                 "edit.html",
                                 &TemplateEditData {
                                     path: path.to_string(),
-                                    content: None,
+                                    is_valid: true,
+                                    content: "".to_string(),
                                 },
                             )?),
                         Err(err) => Err(err.into()),

@@ -6,7 +6,7 @@
 
     {{#*inline "page"}}
         <h1>{{path}}</h1>
-        {{#if content}}
+        {{#if is_valid}}
             <textarea id="input-content" cols="120" rows="30">{{content}}</textarea> <br>
         {{else}}
             <p>The file you are attempting to edit contains binary values. Editing it as text may cause data loss.</p>
