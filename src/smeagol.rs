@@ -244,10 +244,7 @@ impl Smeagol {
                                 "edit.html",
                                 &TemplateEditData {
                                     path: path.to_string(),
-                                    // TODO handle non-utf content
-                                    content: Some(
-                                        String::from_utf8_lossy(&content[..]).to_string(),
-                                    ),
+                                    content: String::from_utf8(content).ok(),
                                 },
                             )?),
                         Err(GitError::NotFound) => Ok(ResponseBuilder::new()

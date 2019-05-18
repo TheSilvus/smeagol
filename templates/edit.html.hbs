@@ -6,7 +6,12 @@
 
     {{#*inline "page"}}
         <h1>{{path}}</h1>
-        <textarea id="input-content" cols="120" rows="30">{{content}}</textarea> <br>
+        {{#if content}}
+            <textarea id="input-content" cols="120" rows="30">{{content}}</textarea> <br>
+        {{else}}
+            <p>The file you are attempting to edit contains binary values. Editing it as text may cause data loss.</p>
+            <textarea id="input-content" cols="120" rows="30"></textarea> <br>
+        {{/if}}
 
         <input id="input-commit-message" value="Edited {{path}}"> <br>
 
