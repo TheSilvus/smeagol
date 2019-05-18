@@ -17,6 +17,7 @@ pub enum ContentType {
     Markdown,
     Json,
     Png,
+    Jpg,
     Binary,
 }
 impl fmt::Display for ContentType {
@@ -27,6 +28,7 @@ impl fmt::Display for ContentType {
             &ContentType::Markdown => write!(f, "application/markdown; charset=utf-8"),
             &ContentType::Json => write!(f, "application/json"),
             &ContentType::Png => write!(f, "image/png"),
+            &ContentType::Jpg => write!(f, "image/jpeg"),
             &ContentType::Binary => write!(f, "application/octet-stream"),
         }
     }

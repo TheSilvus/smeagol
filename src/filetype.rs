@@ -7,6 +7,7 @@ use crate::Path;
 pub enum Filetype {
     Raw,
     Png,
+    Jpg,
     Markdown,
 }
 impl Filetype {
@@ -20,12 +21,14 @@ impl Filetype {
     pub fn is_raw(&self) -> bool {
         match self {
             &Filetype::Png => true,
+            &Filetype::Jpg => true,
             _ => false,
         }
     }
     pub fn is_raw_inline(&self) -> bool {
         match self {
             &Filetype::Png => true,
+            &Filetype::Jpg => true,
             _ => panic!("Attempted to check raw inlining for non-raw filetype"),
         }
     }
@@ -34,6 +37,7 @@ impl Filetype {
         match self {
             &Filetype::Raw => ContentType::Binary,
             &Filetype::Png => ContentType::Png,
+            &Filetype::Jpg => ContentType::Jpg,
             &Filetype::Markdown => ContentType::Markdown,
         }
     }
@@ -60,6 +64,7 @@ impl From<&Path> for Filetype {
             match std::str::from_utf8(&extension) {
                 Ok("md") => Filetype::Markdown,
                 Ok("png") => Filetype::Png,
+                Ok("jpg") | Ok("jpeg") => Filetype::Jpg,
                 Ok(_) | Err(_) => Filetype::Raw,
             }
         } else {
