@@ -40,6 +40,7 @@ impl Smeagol {
             self.config
                 .bind
                 .to_socket_addrs()
+                // TODO handle these as a more graceful error?
                 .expect("Unable to parse socket address")
                 .next()
                 .expect("Unable to parse socket address"),
@@ -101,37 +102,61 @@ impl Smeagol {
                 |path: Path,
                  templates: Arc<Handlebars>,
                  config: Arc<Config>|
-                 -> Result<Response<String>, Rejection> {
+                 -> Result<Response<Vec<u8>>, Rejection> {
                     let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
                     match item.content() {
                         Ok(content) => {
                             let filetype = Filetype::from(&path);
-                            Ok(ResponseBuilder::new()
-                                .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                                .status(200)
-                                .body_template(
-                                    &templates,
-                                    "get.html",
-                                    &TemplateGetData {
-                                        path: path.to_string(),
-                                        // File path has to have parent
-                                        parent_list_link: format!(
-                                            "{}?list",
-                                            PathStringBuilder::new(path.parent().unwrap(),)
-                                                .root(true)
-                                                .build_percent_encode()
-                                        ),
-                                        // TODO handle non-utf content
-                                        content: filetype
-                                            .parse(
-                                                &String::from_utf8_lossy(&content[..]).to_string(),
-                                            )
-                                            .map_err(|err| SmeagolError::from(err))?,
-                                        safe: filetype.is_safe(),
-                                    },
-                                )?)
+                            let raw = filetype.is_raw();
+                            // Possible: Get rid of clone
+                            let parsed_utf8 = String::from_utf8(content.clone());
+
+                            if !raw && parsed_utf8.is_ok() {
+                                Ok(ResponseBuilder::new()
+                                    .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+                                    .status(200)
+                                    .body_template(
+                                        &templates,
+                                        "get.html",
+                                        &TemplateGetData {
+                                            path: path.to_string(),
+                                            // File path has to have parent
+                                            parent_list_link: format!(
+                                                "{}?list",
+                                                PathStringBuilder::new(path.parent().unwrap(),)
+                                                    .root(true)
+                                                    .build_percent_encode()
+                                            ),
+                                            content: filetype
+                                                .parse(
+                                                    // parsing result checked above
+                                                    &parsed_utf8.unwrap(),
+                                                )
+                                                .map_err(|err| SmeagolError::from(err))?,
+                                            safe: filetype.is_safe(),
+                                        },
+                                    )?)
+                            } else {
+                                if filetype.is_raw() && filetype.is_raw_inline() {
+                                    Ok(ResponseBuilder::new()
+                                        .header(
+                                            warp::http::header::CONTENT_TYPE,
+                                            filetype.content_type(),
+                                        )
+                                        .status(200)
+                                        .body(content))
+                                } else {
+                                    Ok(ResponseBuilder::new()
+                                        .header(
+                                            warp::http::header::CONTENT_TYPE,
+                                            filetype.content_type(),
+                                        )
+                                        .status(200)
+                                        .body_download(content))
+                                }
+                            }
                         }
                         Err(GitError::IsDir) => {
                             // TODO refactor with PathStringBuilder in mind (other locations as
@@ -144,7 +169,7 @@ impl Smeagol {
                                     warp::http::header::LOCATION,
                                     format!("/{}", redirect_path.percent_encode()),
                                 )
-                                .body("".to_string()))
+                                .body(vec![]))
                         }
                         Err(GitError::NotFound) => Ok(ResponseBuilder::new()
                             .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
@@ -193,7 +218,7 @@ impl Smeagol {
                  _: QueryParameters,
                  templates: Arc<Handlebars>,
                  config: Arc<Config>|
-                 -> Result<Response<String>, Rejection> {
+                 -> Result<Response<Vec<u8>>, Rejection> {
                     let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
@@ -272,7 +297,7 @@ impl Smeagol {
                  query: QueryParameters,
                  config: Arc<Config>,
                  mut body: warp::body::FullBody|
-                 -> Result<Response<String>, Rejection> {
+                 -> Result<Response<Vec<u8>>, Rejection> {
                     let mut buffer = vec![0; body.remaining()];
                     body.copy_to_slice(&mut buffer[..]);
 
@@ -333,7 +358,7 @@ impl Smeagol {
                  _: QueryParameters,
                  templates: Arc<Handlebars>,
                  config: Arc<Config>|
-                 -> Result<Response<String>, Rejection> {
+                 -> Result<Response<Vec<u8>>, Rejection> {
                     let repo = GitRepository::new(&config.repo)?;
                     let item = repo.item(path.clone())?;
 
@@ -404,7 +429,7 @@ impl Smeagol {
                                     .root(true)
                                     .build_percent_encode(),
                             )
-                            .body("".to_string())),
+                            .body(vec![])),
                         Err(err) => Err(err.into()),
                     }
                 },

@@ -14,14 +14,20 @@ use crate::SmeagolError;
 pub enum ContentType {
     Plain,
     Html,
+    Markdown,
     Json,
+    Png,
+    Binary,
 }
 impl fmt::Display for ContentType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &ContentType::Plain => write!(f, "text/plain; charset=utf-8"),
             &ContentType::Html => write!(f, "text/html; charset=utf-8"),
+            &ContentType::Markdown => write!(f, "application/markdown; charset=utf-8"),
             &ContentType::Json => write!(f, "application/json"),
+            &ContentType::Png => write!(f, "image/png"),
+            &ContentType::Binary => write!(f, "application/octet-stream"),
         }
     }
 }
@@ -70,17 +76,26 @@ impl ResponseBuilder {
         templates: &Handlebars,
         template: &str,
         data: &T,
-    ) -> Result<Response<String>, SmeagolError> {
+    ) -> Result<Response<Vec<u8>>, SmeagolError> {
         Ok(self.body(
             templates
                 .render(template, data)
-                .map_err(|err| SmeagolError::from(err))?,
+                .map_err(|err| SmeagolError::from(err))?
+                .into_bytes(),
         ))
     }
 
-    pub fn body_json<T: Serialize>(&mut self, data: &T) -> Result<Response<String>, SmeagolError> {
+    pub fn body_json<T: Serialize>(&mut self, data: &T) -> Result<Response<Vec<u8>>, SmeagolError> {
         Ok(self
             .header(warp::http::header::CONTENT_TYPE, ContentType::Json)
-            .body(serde_json::to_string(data)?))
+            .body(serde_json::to_string(data)?.into_bytes()))
     }
+
+    pub fn body_download(&mut self, data: Vec<u8>) -> Response<Vec<u8>> {
+        // TODO actual content type, if possible?
+        self.header(warp::http::header::CONTENT_DISPOSITION, "attachment")
+            .body(data)
+    }
+
+    // TODO redirect body
 }
