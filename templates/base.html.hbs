@@ -9,10 +9,27 @@
 
         <a href="/">Home</a>
         <a href="/?list">List Home</a>
+        <!-- TODO add styling for this link -->
+        <a onclick="create()">Create</a>
 
         <div>
             {{> page}}
         </div>
+
+        <script>
+            function create() {
+                let name = prompt("Enter file name:");
+                name = encodeURI(name);
+
+                if (name.startsWith("/")) {
+                    location.assign(name + "?edit");
+                } else {
+                    location.assign("/" + name + "?edit");
+                }
+
+                return true;
+            }
+        </script>
     </body>
 </html>
 
