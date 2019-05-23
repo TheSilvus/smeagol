@@ -312,7 +312,9 @@ impl Smeagol {
                             Ok(ResponseBuilder::new()
                                 .status(200)
                                 .body_json(&EditSuccessData {
-                                    path: path.percent_encode(),
+                                    path: PathStringBuilder::new(path)
+                                        .root(true)
+                                        .build_percent_encode(),
                                 })?)
                         }
                         Err(GitError::CannotCreate) => Ok(ResponseBuilder::new()
@@ -375,7 +377,7 @@ impl Smeagol {
                                 &TemplateListData {
                                     path: PathStringBuilder::new(path.clone())
                                         .dir(true)
-                                        .build_percent_encode(),
+                                        .build_lossy(),
                                     parent_list_link: path.clone().parent().map(|path| {
                                         format!(
                                             "{}?list",
@@ -419,9 +421,7 @@ impl Smeagol {
                                 &templates,
                                 "list_not_found.html",
                                 &TemplateListNotFoundData {
-                                    path: PathStringBuilder::new(path)
-                                        .dir(true)
-                                        .build_percent_encode(),
+                                    path: PathStringBuilder::new(path).dir(true).build_lossy(),
                                 },
                             )?),
                         Err(GitError::IsFile) => Ok(ResponseBuilder::new()
