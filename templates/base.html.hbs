@@ -19,6 +19,9 @@
         <script>
             function create() {
                 let name = prompt("Enter file name:");
+                if (name == null) {
+                    return;
+                }
                 name = encodeURI(name);
 
                 if (name.startsWith("/")) {
