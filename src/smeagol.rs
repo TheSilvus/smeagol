@@ -10,7 +10,7 @@ use warp::http::Response;
 use warp::{Buf, Filter, Rejection, Reply};
 
 use crate::git::GitError;
-use crate::warp_helper::{ContentType, ResponseBuilder};
+use crate::warp_helper::ResponseBuilder;
 use crate::{Config, Filetype, GitRepository, Path, PathStringBuilder, SmeagolError};
 
 pub struct Smeagol {
@@ -66,10 +66,11 @@ impl Smeagol {
         move |err: warp::Rejection| {
             if let Some(ref err) = err.find_cause::<SmeagolError>() {
                 error!("Internal error: {}", err);
-                Ok(ResponseBuilder::new()
-                    .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                    .status(500)
-                    .body_template(&templates, "500.html", &Template500Data {})?)
+                Ok(ResponseBuilder::new().status(500).body_template(
+                    &templates,
+                    "500.html",
+                    &Template500Data {},
+                )?)
             } else {
                 Err(err)
             }
@@ -139,30 +140,27 @@ impl Smeagol {
                             let parsed_utf8 = String::from_utf8(content.clone());
 
                             if !raw && parsed_utf8.is_ok() {
-                                Ok(ResponseBuilder::new()
-                                    .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                                    .status(200)
-                                    .body_template(
-                                        &templates,
-                                        "get.html",
-                                        &TemplateGetData {
-                                            path: path.to_string(),
-                                            // File path has to have parent
-                                            parent_list_link: format!(
-                                                "{}?list",
-                                                PathStringBuilder::new(path.parent().unwrap(),)
-                                                    .root(true)
-                                                    .build_percent_encode()
-                                            ),
-                                            content: filetype
-                                                .parse(
-                                                    // parsing result checked above
-                                                    &parsed_utf8.unwrap(),
-                                                )
-                                                .map_err(|err| SmeagolError::from(err))?,
-                                            safe: filetype.is_safe(),
-                                        },
-                                    )?)
+                                Ok(ResponseBuilder::new().status(200).body_template(
+                                    &templates,
+                                    "get.html",
+                                    &TemplateGetData {
+                                        path: path.to_string(),
+                                        // File path has to have parent
+                                        parent_list_link: format!(
+                                            "{}?list",
+                                            PathStringBuilder::new(path.parent().unwrap(),)
+                                                .root(true)
+                                                .build_percent_encode()
+                                        ),
+                                        content: filetype
+                                            .parse(
+                                                // parsing result checked above
+                                                &parsed_utf8.unwrap(),
+                                            )
+                                            .map_err(|err| SmeagolError::from(err))?,
+                                        safe: filetype.is_safe(),
+                                    },
+                                )?)
                             } else {
                                 if filetype.is_raw() && filetype.is_raw_inline() {
                                     Ok(ResponseBuilder::new()
@@ -196,17 +194,16 @@ impl Smeagol {
                                 )
                                 .body(vec![]))
                         }
-                        Err(GitError::NotFound) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(404)
-                            .body_template(
+                        Err(GitError::NotFound) => {
+                            Ok(ResponseBuilder::new().status(404).body_template(
                                 &templates,
                                 "get_not_found.html",
                                 &TemplateGetNotFoundData {
                                     path: path.to_string(),
                                     can_exist: item.can_exist()?,
                                 },
-                            )?),
+                            )?)
+                        }
                         Err(err) => Err(err.into()),
                     }
                 },
@@ -249,38 +246,30 @@ impl Smeagol {
                     let item = repo.item(path.clone())?;
 
                     if !item.can_exist()? || (item.exists()? && item.is_dir()?) {
-                        return Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(400)
-                            .body_template(
-                                &templates,
-                                "edit_cannot_exist.html",
-                                &TemplateCannotExistData {
-                                    path: path.to_string(),
-                                },
-                            )?);
+                        return Ok(ResponseBuilder::new().status(400).body_template(
+                            &templates,
+                            "edit_cannot_exist.html",
+                            &TemplateCannotExistData {
+                                path: path.to_string(),
+                            },
+                        )?);
                     }
 
                     match item.content() {
                         Ok(content) => {
                             let parsed_content = String::from_utf8(content);
-                            Ok(ResponseBuilder::new()
-                                .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                                .status(200)
-                                .body_template(
-                                    &templates,
-                                    "edit.html",
-                                    &TemplateEditData {
-                                        path: path.to_string(),
-                                        is_valid: parsed_content.is_ok(),
-                                        content: parsed_content.unwrap_or("".to_string()),
-                                    },
-                                )?)
+                            Ok(ResponseBuilder::new().status(200).body_template(
+                                &templates,
+                                "edit.html",
+                                &TemplateEditData {
+                                    path: path.to_string(),
+                                    is_valid: parsed_content.is_ok(),
+                                    content: parsed_content.unwrap_or("".to_string()),
+                                },
+                            )?)
                         }
-                        Err(GitError::NotFound) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(200)
-                            .body_template(
+                        Err(GitError::NotFound) => {
+                            Ok(ResponseBuilder::new().status(200).body_template(
                                 &templates,
                                 "edit.html",
                                 &TemplateEditData {
@@ -288,7 +277,8 @@ impl Smeagol {
                                     is_valid: true,
                                     content: "".to_string(),
                                 },
-                            )?),
+                            )?)
+                        }
                         Err(err) => Err(err.into()),
                     }
                 },
@@ -393,62 +383,56 @@ impl Smeagol {
                     let item = repo.item(path.clone())?;
 
                     match item.list() {
-                        Ok(items) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(200)
-                            .body_template(
-                                &templates,
-                                "list.html",
-                                &TemplateListData {
-                                    path: PathStringBuilder::new(path.clone())
-                                        .dir(true)
-                                        .build_lossy(),
-                                    parent_list_link: path.clone().parent().map(|path| {
-                                        format!(
-                                            "{}?list",
-                                            PathStringBuilder::new(path)
-                                                .root(true)
-                                                .build_percent_encode()
-                                        )
-                                    }),
-                                    children: items
-                                        .iter()
-                                        .map(|item| -> Result<TemplateListChildData, GitError> {
-                                            let link = if item.is_dir()? {
-                                                format!(
-                                                    "{}?list",
-                                                    PathStringBuilder::new(item.path().clone())
-                                                        .root(true)
-                                                        .build_percent_encode()
-                                                )
-                                            } else {
+                        Ok(items) => Ok(ResponseBuilder::new().status(200).body_template(
+                            &templates,
+                            "list.html",
+                            &TemplateListData {
+                                path: PathStringBuilder::new(path.clone()).dir(true).build_lossy(),
+                                parent_list_link: path.clone().parent().map(|path| {
+                                    format!(
+                                        "{}?list",
+                                        PathStringBuilder::new(path)
+                                            .root(true)
+                                            .build_percent_encode()
+                                    )
+                                }),
+                                children: items
+                                    .iter()
+                                    .map(|item| -> Result<TemplateListChildData, GitError> {
+                                        let link = if item.is_dir()? {
+                                            format!(
+                                                "{}?list",
                                                 PathStringBuilder::new(item.path().clone())
                                                     .root(true)
                                                     .build_percent_encode()
-                                            };
-                                            Ok(TemplateListChildData {
-                                                link: link,
-                                                name: PathStringBuilder::new(
-                                                    // A child of something has to have a filename
-                                                    item.path().filename().unwrap(),
-                                                )
-                                                .dir(item.is_dir()?)
-                                                .build_lossy(),
-                                            })
+                                            )
+                                        } else {
+                                            PathStringBuilder::new(item.path().clone())
+                                                .root(true)
+                                                .build_percent_encode()
+                                        };
+                                        Ok(TemplateListChildData {
+                                            link: link,
+                                            name: PathStringBuilder::new(
+                                                // A child of something has to have a filename
+                                                item.path().filename().unwrap(),
+                                            )
+                                            .dir(item.is_dir()?)
+                                            .build_lossy(),
                                         })
-                                        .collect::<Result<Vec<_>, _>>()?,
-                                },
-                            )?),
-                        Err(GitError::NotFound) => Ok(ResponseBuilder::new()
-                            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
-                            .status(200)
-                            .body_template(
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?,
+                            },
+                        )?),
+                        Err(GitError::NotFound) => {
+                            Ok(ResponseBuilder::new().status(200).body_template(
                                 &templates,
                                 "list_not_found.html",
                                 &TemplateListNotFoundData {
                                     path: PathStringBuilder::new(path).dir(true).build_lossy(),
                                 },
-                            )?),
+                            )?)
+                        }
                         Err(GitError::IsFile) => Ok(ResponseBuilder::new()
                             .status(302)
                             .header(

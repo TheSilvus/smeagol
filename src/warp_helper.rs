@@ -79,12 +79,14 @@ impl ResponseBuilder {
         template: &str,
         data: &T,
     ) -> Result<Response<Vec<u8>>, SmeagolError> {
-        Ok(self.body(
-            templates
-                .render(template, data)
-                .map_err(|err| SmeagolError::from(err))?
-                .into_bytes(),
-        ))
+        Ok(self
+            .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+            .body(
+                templates
+                    .render(template, data)
+                    .map_err(|err| SmeagolError::from(err))?
+                    .into_bytes(),
+            ))
     }
 
     pub fn body_json<T: Serialize>(&mut self, data: &T) -> Result<Response<Vec<u8>>, SmeagolError> {
