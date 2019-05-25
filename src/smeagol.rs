@@ -49,22 +49,47 @@ impl Smeagol {
 
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         self.statics()
-            .or(self.edit())
-            .or(self.edit_post())
-            .or(self.list())
-            .or(self.get())
+            .or(self.edit().recover(self.handle_500_html()))
+            .or(self.edit_post().recover(self.handle_500_json()))
+            .or(self.list().recover(self.handle_500_html()))
+            .or(self.get().recover(self.handle_500_html()))
             .with(warp::log::log("smeagol"))
-            .recover(Self::recover_500())
     }
-    fn recover_500(
-    ) -> impl Fn(warp::Rejection) -> Result<warp::http::Response<String>, Rejection> + Clone {
+
+    fn handle_500_html(
+        &self,
+    ) -> impl Fn(warp::Rejection) -> Result<warp::http::Response<Vec<u8>>, Rejection> + Clone {
+        let templates = self.handlebars.clone();
+
+        #[derive(Serialize)]
+        struct Template500Data {}
+        move |err: warp::Rejection| {
+            if let Some(ref err) = err.find_cause::<SmeagolError>() {
+                error!("Internal error: {}", err);
+                Ok(ResponseBuilder::new()
+                    .header(warp::http::header::CONTENT_TYPE, ContentType::Html)
+                    .status(500)
+                    .body_template(&templates, "500.html", &Template500Data {})?)
+            } else {
+                Err(err)
+            }
+        }
+    }
+    fn handle_500_json(
+        &self,
+    ) -> impl Fn(warp::Rejection) -> Result<warp::http::Response<Vec<u8>>, Rejection> + Clone {
+        #[derive(Serialize)]
+        struct Json500Error {
+            error: String,
+        }
         |err: warp::Rejection| {
             if let Some(ref err) = err.find_cause::<SmeagolError>() {
                 error!("Internal error: {}", err);
                 Ok(ResponseBuilder::new()
-                    .header(warp::http::header::CONTENT_TYPE, ContentType::Plain)
                     .status(500)
-                    .body("An internal error occurred.".to_string()))
+                    .body_json(&Json500Error {
+                        error: "An internal error occurred.".to_string(),
+                    })?)
             } else {
                 Err(err)
             }
