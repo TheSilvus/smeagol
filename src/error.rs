@@ -8,59 +8,56 @@ use crate::config::ConfigError;
 use crate::filetype::ParsingError;
 use crate::git::GitError;
 
-// TODO remove Error suffix for all error enums
 #[derive(Debug)]
 pub enum SmeagolError {
-    GitError(GitError),
-    ConfigError(ConfigError),
-    TemplateFileError(TemplateFileError),
-    TemplateRenderError(RenderError),
-    SerdeJsonError(JsonError),
-    ParsingError(ParsingError),
+    Git(GitError),
+    Config(ConfigError),
+    TemplateFile(TemplateFileError),
+    TemplateRender(RenderError),
+    SerdeJson(JsonError),
+    Parsing(ParsingError),
 }
 impl std::error::Error for SmeagolError {}
 impl fmt::Display for SmeagolError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &SmeagolError::GitError(ref err) => write!(f, "Git error: {}", err),
-            &SmeagolError::ConfigError(ref err) => write!(f, "Config error: {}", err),
-            &SmeagolError::TemplateFileError(ref err) => write!(f, "Template file error: {}", err),
-            &SmeagolError::TemplateRenderError(ref err) => {
-                write!(f, "Template render error: {}", err)
-            }
-            &SmeagolError::SerdeJsonError(ref err) => write!(f, "Json error: {}", err),
-            &SmeagolError::ParsingError(ref err) => write!(f, "Parsing error: {}", err),
+            &SmeagolError::Git(ref err) => write!(f, "Git error: {}", err),
+            &SmeagolError::Config(ref err) => write!(f, "Config error: {}", err),
+            &SmeagolError::TemplateFile(ref err) => write!(f, "Template file error: {}", err),
+            &SmeagolError::TemplateRender(ref err) => write!(f, "Template render error: {}", err),
+            &SmeagolError::SerdeJson(ref err) => write!(f, "Json error: {}", err),
+            &SmeagolError::Parsing(ref err) => write!(f, "Parsing error: {}", err),
         }
     }
 }
 impl From<GitError> for SmeagolError {
     fn from(err: GitError) -> Self {
-        SmeagolError::GitError(err)
+        SmeagolError::Git(err)
     }
 }
 impl From<ConfigError> for SmeagolError {
     fn from(err: ConfigError) -> Self {
-        SmeagolError::ConfigError(err)
+        SmeagolError::Config(err)
     }
 }
 impl From<TemplateFileError> for SmeagolError {
     fn from(err: TemplateFileError) -> Self {
-        SmeagolError::TemplateFileError(err)
+        SmeagolError::TemplateFile(err)
     }
 }
 impl From<RenderError> for SmeagolError {
     fn from(err: RenderError) -> Self {
-        SmeagolError::TemplateRenderError(err)
+        SmeagolError::TemplateRender(err)
     }
 }
 impl From<JsonError> for SmeagolError {
     fn from(err: JsonError) -> Self {
-        SmeagolError::SerdeJsonError(err)
+        SmeagolError::SerdeJson(err)
     }
 }
 impl From<ParsingError> for SmeagolError {
     fn from(err: ParsingError) -> Self {
-        SmeagolError::ParsingError(err)
+        SmeagolError::Parsing(err)
     }
 }
 

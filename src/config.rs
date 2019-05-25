@@ -22,26 +22,26 @@ impl Config {
 
 #[derive(Debug)]
 pub enum ConfigError {
-    IoError(std::io::Error),
-    TomlError(toml::de::Error),
+    Io(std::io::Error),
+    Toml(toml::de::Error),
 }
 impl std::error::Error for ConfigError {}
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ConfigError::IoError(ref err) => write!(f, "IO error: {}", err),
-            &ConfigError::TomlError(ref err) => write!(f, "TOML error: {}", err),
+            &ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+            &ConfigError::Toml(ref err) => write!(f, "TOML error: {}", err),
         }
     }
 }
 
 impl From<std::io::Error> for ConfigError {
     fn from(err: std::io::Error) -> ConfigError {
-        ConfigError::IoError(err)
+        ConfigError::Io(err)
     }
 }
 impl From<toml::de::Error> for ConfigError {
     fn from(err: toml::de::Error) -> ConfigError {
-        ConfigError::TomlError(err)
+        ConfigError::Toml(err)
     }
 }
