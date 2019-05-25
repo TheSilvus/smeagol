@@ -203,6 +203,14 @@ impl<'repo> GitItem<'repo> {
                 if entry.kind() != Some(ObjectType::Blob) {
                     return Err(GitError::IsDir);
                 }
+
+                // The object id is essentially a hash of the object's content. We can therefore
+                // compare the hashes to check if the file has changed.
+                //
+                // Unwrapping the object should never fail - I think
+                if entry.to_object(&self.repo.repo).unwrap().id() == object {
+                    return Err(GitError::NoChange);
+                }
             }
             // TODO changeble filemode
             tree.insert(filename.bytes(), object, 0o100644)?;
@@ -238,6 +246,7 @@ pub enum GitError {
     IsDir,
     IsFile,
     CannotCreate,
+    NoChange,
 }
 impl std::error::Error for GitError {}
 impl std::fmt::Display for GitError {
@@ -250,6 +259,7 @@ impl std::fmt::Display for GitError {
             &GitError::IsDir => write!(f, "Is directory"),
             &GitError::IsFile => write!(f, "Is file"),
             &GitError::CannotCreate => write!(f, "Cannot create file at that location"),
+            &GitError::NoChange => write!(f, "The file has not changed."),
         }
     }
 }

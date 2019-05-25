@@ -323,15 +323,13 @@ impl Smeagol {
                     let item = repo.item(path.clone())?;
 
                     match item.edit(&buffer[..], &query.commit_message) {
-                        Ok(()) => {
-                            Ok(ResponseBuilder::new()
-                                .status(200)
-                                .body_json(&EditSuccessData {
-                                    path: PathStringBuilder::new(path)
-                                        .root(true)
-                                        .build_percent_encode(),
-                                })?)
-                        }
+                        Ok(()) | Err(GitError::NoChange) => Ok(ResponseBuilder::new()
+                            .status(200)
+                            .body_json(&EditSuccessData {
+                                path: PathStringBuilder::new(path)
+                                    .root(true)
+                                    .build_percent_encode(),
+                            })?),
                         Err(GitError::CannotCreate) => Ok(ResponseBuilder::new()
                             .status(400)
                             .body_json(&EditErrorData {
