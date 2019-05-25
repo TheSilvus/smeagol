@@ -20,10 +20,12 @@ pub struct Smeagol {
 impl Smeagol {
     pub fn new() -> Result<Smeagol, SmeagolError> {
         debug!("Initializing");
+
+        let config_file = std::env::var("SMEAGOL_CONF").unwrap_or("Smeagol.toml".to_string());
+
         Ok(Smeagol {
             handlebars: Arc::new(Self::initialize_handlebars()?),
-            // TODO path from env variable?
-            config: Arc::new(Config::load("Smeagol.toml")?),
+            config: Arc::new(Config::load(&config_file)?),
         })
     }
     fn initialize_handlebars() -> Result<Handlebars, SmeagolError> {
@@ -34,17 +36,10 @@ impl Smeagol {
         Ok(handlebars)
     }
 
-    pub fn start(self) {
-        use std::net::ToSocketAddrs;
-        warp::serve(self.routes()).run(
-            self.config
-                .bind
-                .to_socket_addrs()
-                // TODO handle these as a more graceful error?
-                .expect("Unable to parse socket address")
-                .next()
-                .expect("Unable to parse socket address"),
-        );
+    pub fn start(self) -> Result<(), SmeagolError> {
+        warp::serve(self.routes()).run(self.config.parse_bind()?);
+
+        Ok(())
     }
 
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
@@ -182,17 +177,9 @@ impl Smeagol {
                             }
                         }
                         Err(GitError::IsDir) => {
-                            // TODO refactor with PathStringBuilder in mind (other locations as
-                            // well)
                             let mut redirect_path = path;
                             redirect_path.push(config.index.to_string());
-                            Ok(ResponseBuilder::new()
-                                .status(302)
-                                .header(
-                                    warp::http::header::LOCATION,
-                                    format!("/{}", redirect_path.percent_encode()),
-                                )
-                                .body(vec![]))
+                            Ok(ResponseBuilder::new().redirect(redirect_path))
                         }
                         Err(GitError::NotFound) => {
                             Ok(ResponseBuilder::new().status(404).body_template(
@@ -434,15 +421,7 @@ impl Smeagol {
                                 },
                             )?)
                         }
-                        Err(GitError::IsFile) => Ok(ResponseBuilder::new()
-                            .status(302)
-                            .header(
-                                warp::http::header::LOCATION,
-                                PathStringBuilder::new(path)
-                                    .root(true)
-                                    .build_percent_encode(),
-                            )
-                            .body(vec![])),
+                        Err(GitError::IsFile) => Ok(ResponseBuilder::new().redirect(path)),
                         Err(err) => Err(err.into()),
                     }
                 },

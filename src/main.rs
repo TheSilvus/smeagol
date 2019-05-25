@@ -18,8 +18,8 @@ mod warp_helper;
 fn main() {
     pretty_env_logger::init_custom_env("SMEAGOL_LOG");
 
-    match Smeagol::new() {
-        Ok(smeagol) => smeagol.start(),
+    match Smeagol::new().and_then(|smeagol| smeagol.start()) {
+        Ok(_) => (),
         Err(SmeagolError::Config(ref err)) => error!("Could not load config: {}", err),
         Err(ref err) => panic!("{}", err),
     }

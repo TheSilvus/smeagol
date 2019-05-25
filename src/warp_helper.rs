@@ -9,6 +9,7 @@ use warp::http::response::Builder as HttpResponseBuilder;
 use warp::http::status::StatusCode;
 use warp::http::{HttpTryFrom, Response};
 
+use crate::path::{Path, PathStringBuilder};
 use crate::SmeagolError;
 
 pub enum ContentType {
@@ -96,10 +97,18 @@ impl ResponseBuilder {
     }
 
     pub fn body_download(&mut self, data: Vec<u8>) -> Response<Vec<u8>> {
-        // TODO actual content type, if possible?
         self.header(warp::http::header::CONTENT_DISPOSITION, "attachment")
             .body(data)
     }
 
-    // TODO redirect body
+    pub fn redirect(&mut self, destination: Path) -> Response<Vec<u8>> {
+        self.status(302)
+            .header(
+                warp::http::header::LOCATION,
+                PathStringBuilder::new(destination)
+                    .root(true)
+                    .build_percent_encode(),
+            )
+            .body(vec![])
+    }
 }

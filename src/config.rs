@@ -1,4 +1,5 @@
 use std::fmt;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -18,12 +19,22 @@ impl Config {
         let content = std::fs::read_to_string(path)?;
         Ok(toml::from_str(&content)?)
     }
+
+    pub fn parse_bind(&self) -> Result<SocketAddr, ConfigError> {
+        Ok(self
+            .bind
+            .to_socket_addrs()
+            .map_err(|_| ConfigError::InvalidSocketAddress)?
+            .next()
+            .ok_or(ConfigError::InvalidSocketAddress)?)
+    }
 }
 
 #[derive(Debug)]
 pub enum ConfigError {
     Io(std::io::Error),
     Toml(toml::de::Error),
+    InvalidSocketAddress,
 }
 impl std::error::Error for ConfigError {}
 impl std::fmt::Display for ConfigError {
@@ -31,6 +42,7 @@ impl std::fmt::Display for ConfigError {
         match self {
             &ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
             &ConfigError::Toml(ref err) => write!(f, "TOML error: {}", err),
+            &ConfigError::InvalidSocketAddress => write!(f, "Invalid socket address"),
         }
     }
 }

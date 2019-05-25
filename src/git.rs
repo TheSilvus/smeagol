@@ -83,7 +83,7 @@ impl<'repo> GitItem<'repo> {
     }
 
     fn object(&self) -> Result<Object<'repo>, GitError> {
-        // TODO cache object
+        // object could be cached but I am not sure how cache invalidation could be implemented.
 
         if self.path.is_empty() {
             return Ok(self.repo.head()?.tree()?.into_object());
@@ -159,9 +159,12 @@ impl<'repo> GitItem<'repo> {
     }
 
     pub fn edit(&self, content: &[u8], message: &str) -> Result<(), GitError> {
-        // TODO I create quite a few objects here that are never used in case of an error. They
-        // would be removed by a git gc. Should I attempt to remove them myself?
-        // TODO get original file mode
+        // I create quite a few objects that are discarded in case of an error during committing.
+        // This could partially be prevented by walking the tree first and checking if the file
+        // could exist because this is the most probable source of errors. I cannot delete the
+        // objects manually because git2 does not support this. They can be deleted by manually
+        // running `git gc` though.
+
         let mut blob_writer = self.repo.repo.blob_writer(None)?;
         blob_writer.write(content)?;
         let blob_oid = blob_writer.commit()?;
@@ -199,7 +202,8 @@ impl<'repo> GitItem<'repo> {
 
         if path.segments().count() == 1 {
             let filename = path.filename().unwrap();
-            if let Some(entry) = tree.get(filename.bytes())? {
+            // The filemode of the original file is used if it already exists.
+            let filemode = if let Some(entry) = tree.get(filename.bytes())? {
                 if entry.kind() != Some(ObjectType::Blob) {
                     return Err(GitError::IsDir);
                 }
@@ -211,9 +215,13 @@ impl<'repo> GitItem<'repo> {
                 if entry.to_object(&self.repo.repo).unwrap().id() == object {
                     return Err(GitError::NoChange);
                 }
-            }
-            // TODO changeble filemode
-            tree.insert(filename.bytes(), object, 0o100644)?;
+
+                entry.filemode()
+            } else {
+                // non-executable file mode
+                0o100644
+            };
+            tree.insert(filename.bytes(), object, filemode)?;
             Ok(())
         } else {
             let first = path.pop_first().unwrap();
