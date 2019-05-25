@@ -1,3 +1,5 @@
+use log::error;
+
 mod smeagol;
 use smeagol::Smeagol;
 
@@ -16,7 +18,9 @@ mod warp_helper;
 fn main() {
     pretty_env_logger::init_custom_env("SMEAGOL_LOG");
 
-    // TODO graceful error handling on configerror
-    let smeagol = Smeagol::new().expect("Unable to initialize Smeagol");
-    smeagol.start();
+    match Smeagol::new() {
+        Ok(smeagol) => smeagol.start(),
+        Err(SmeagolError::Config(ref err)) => error!("Could not load config: {}", err),
+        Err(ref err) => panic!("{}", err),
+    }
 }
