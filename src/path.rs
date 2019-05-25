@@ -10,7 +10,13 @@ define_encode_set! {
 const PATH_SEPARATOR: u8 = '/' as u8;
 const EXTENSION_SEPARATOR: u8 = '.' as u8;
 
-// TODO I could add a separate referencetype for this structure
+// I am not happy with the external API of this struct.
+//
+// 1. There is no comparable reference type (String => &str)
+// 2. Multiple methods that could return slices (or the reference type) don't
+// 3. Some conversions using From/Into are lossy
+//
+// I'd like to redesign it but I just don't think it's worth it at this point.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
     content: Vec<u8>,
@@ -100,7 +106,6 @@ impl Path {
         }
     }
 
-    // TODO rewrite this with slice return value
     pub fn extension(&self) -> Option<Vec<u8>> {
         if let Some(filename) = self.filename() {
             assert!(filename.bytes().len() > 0);
@@ -146,7 +151,6 @@ impl From<&StdPath> for Path {
     fn from(p: &StdPath) -> Path {
         // Note: This conversion panics if the path is invalid unicode. It should therefore not be
         // used on untrusted data.
-        // TODO implement this using TryFrom
         Path::from(p.to_str().unwrap().to_string())
     }
 }
@@ -154,7 +158,6 @@ impl From<&Path> for StdPathBuf {
     fn from(p: &Path) -> StdPathBuf {
         // Note: This conversion panics if the path is invalid unicode. It should therefore not be
         // used on untrusted data.
-        // TODO implement this using TryFrom
         StdPathBuf::from(String::from_utf8(p.content.clone()).unwrap())
     }
 }
