@@ -40,8 +40,7 @@
                 }
 
                 let file = files[0];
-                // TODO use value from config here
-                if (file.size > 1000000) {
+                if (file.size > {{config.max_upload_size}}) {
                     alert("The file is too big.");
                     return;
                 }

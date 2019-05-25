@@ -222,10 +222,11 @@ impl Smeagol {
             path: String,
         }
         #[derive(Serialize)]
-        struct TemplateEditData {
+        struct TemplateEditData<'a> {
             path: String,
             content: String,
             is_valid: bool,
+            config: &'a Config,
         }
         warp::get2()
             .and(
@@ -265,6 +266,7 @@ impl Smeagol {
                                     path: path.to_string(),
                                     is_valid: parsed_content.is_ok(),
                                     content: parsed_content.unwrap_or("".to_string()),
+                                    config: &config,
                                 },
                             )?)
                         }
@@ -276,6 +278,7 @@ impl Smeagol {
                                     path: path.to_string(),
                                     is_valid: true,
                                     content: "".to_string(),
+                                    config: &config,
                                 },
                             )?)
                         }
