@@ -1,8 +1,8 @@
-use crate::Path;
-
 use std::io;
 use std::io::Write;
 use std::path::Path as StdPath;
+
+use crate::Path;
 
 use git2::{
     Commit, ErrorCode, Object, ObjectType, Oid, Repository, RepositoryInitOptions, Signature,
@@ -93,6 +93,7 @@ impl<'repo> GitItem<'repo> {
         let tree = if let Ok(tree) = parent_object.into_tree() {
             tree
         } else {
+            // This could also return GitError::CannotExist or something similar
             return Err(GitError::NotFound);
         };
 
@@ -201,6 +202,7 @@ impl<'repo> GitItem<'repo> {
         assert!(!path.is_empty());
 
         if path.segments().count() == 1 {
+            // TODO filename() essentially returns the path itself
             let filename = path.filename().unwrap();
             // The filemode of the original file is used if it already exists.
             let filemode = if let Some(entry) = tree.get(filename.bytes())? {
@@ -241,6 +243,69 @@ impl<'repo> GitItem<'repo> {
             tree.insert(first.bytes(), subtree_oid, 0o040000)?;
 
             Ok(())
+        }
+    }
+
+    pub fn remove(&self, message: &str) -> Result<(), GitError> {
+        let head = self.repo.head()?;
+        let head_tree = head.tree()?;
+
+        let mut tree_builder = self.repo.repo.treebuilder(Some(&head_tree))?;
+
+        tree_builder = if self.remove_from_tree(&mut tree_builder, self.path.clone())? {
+            self.repo.repo.treebuilder(None)?
+        } else {
+            tree_builder
+        };
+
+        // TODO deduplicate commit creation with Self::edit
+        let tree_oid = tree_builder.write()?;
+        let new_tree = self.repo.repo.find_tree(tree_oid)?;
+
+        let signature = Signature::now("smeagol", "smeagol@smeagol")?;
+
+        self.repo.repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &new_tree,
+            &[&head],
+        )?;
+
+        Ok(())
+    }
+
+    fn remove_from_tree(&self, tree: &mut TreeBuilder, mut path: Path) -> Result<bool, GitError> {
+        assert!(!path.is_empty());
+
+        if path.segments().count() == 1 {
+            tree.remove(path.bytes())?;
+            // TODO could returning true happen earlier?
+            Ok(tree.len() == 0)
+        } else {
+            let first = path.pop_first().unwrap();
+
+            let mut subtree_builder = if let Some(entry) = tree.get(first.bytes())? {
+                if let Some(subtree) = entry.to_object(&self.repo.repo)?.as_tree() {
+                    self.repo.repo.treebuilder(Some(subtree))?
+                } else {
+                    return Err(GitError::NotFound);
+                }
+            } else {
+                return Err(GitError::NotFound);
+            };
+
+            if self.remove_from_tree(&mut subtree_builder, path)? {
+                if tree.len() == 1 {
+                    return Ok(true);
+                }
+            }
+            let subtree_oid = subtree_builder.write()?;
+            // TODO constants for git mode constants...
+            tree.insert(first.bytes(), subtree_oid, 0o040000)?;
+
+            Ok(false)
         }
     }
 }
@@ -367,6 +432,99 @@ mod tests {
         assert!(item.is_file().unwrap());
         assert!(!item.is_dir().unwrap());
         assert_eq!(item.content().unwrap(), file_content);
+    }
+
+    #[test]
+    fn remove_only_file_in_repo() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path = Path::from("index.md".to_string());
+        let item = repo.item(path).unwrap();
+
+        item.edit("content".as_bytes(), "Commit message").unwrap();
+        assert!(item.exists().unwrap());
+
+        item.remove("Commit message").unwrap();
+        assert!(!item.exists().unwrap());
+    }
+    #[test]
+    fn remove_single_file() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path1 = Path::from("index1.md".to_string());
+        let item1 = repo.item(path1).unwrap();
+        let path2 = Path::from("index2.md".to_string());
+        let item2 = repo.item(path2).unwrap();
+
+        item1.edit("content1".as_bytes(), "Commit message").unwrap();
+        assert!(item1.exists().unwrap());
+        item2.edit("content2".as_bytes(), "Commit message").unwrap();
+        assert!(item2.exists().unwrap());
+
+        item1.remove("Commit message").unwrap();
+        assert!(!item1.exists().unwrap());
+        assert!(item2.exists().unwrap());
+    }
+
+    #[test]
+    fn remove_only_file_in_dir_and_repo() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path = Path::from("test/index.md".to_string());
+        let item = repo.item(path).unwrap();
+        let dir_item = item.parent().unwrap();
+
+        item.edit("content".as_bytes(), "Commit message").unwrap();
+        assert!(item.exists().unwrap());
+
+        item.remove("Commit message").unwrap();
+        assert!(!item.exists().unwrap());
+        assert!(!dir_item.exists().unwrap());
+    }
+    #[test]
+    fn remove_single_file_in_dir() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path1 = Path::from("test/index1.md".to_string());
+        let item1 = repo.item(path1).unwrap();
+        let path2 = Path::from("test/index2.md".to_string());
+        let item2 = repo.item(path2).unwrap();
+        let dir_item = item1.parent().unwrap();
+
+        item1.edit("content1".as_bytes(), "Commit message").unwrap();
+        assert!(item1.exists().unwrap());
+        item2.edit("content2".as_bytes(), "Commit message").unwrap();
+        assert!(item2.exists().unwrap());
+
+        item1.remove("Commit message").unwrap();
+        assert!(!item1.exists().unwrap());
+        assert!(item2.exists().unwrap());
+        assert!(dir_item.exists().unwrap());
+    }
+    #[test]
+    fn remove_only_file_in_dir_but_not_in_repo() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path1 = Path::from("test/index1.md".to_string());
+        let item1 = repo.item(path1).unwrap();
+        let path2 = Path::from("index2.md".to_string());
+        let item2 = repo.item(path2).unwrap();
+        let dir_item = item1.parent().unwrap();
+
+        item1.edit("content1".as_bytes(), "Commit message").unwrap();
+        assert!(item1.exists().unwrap());
+        item2.edit("content2".as_bytes(), "Commit message").unwrap();
+        assert!(item2.exists().unwrap());
+
+        item1.remove("Commit message").unwrap();
+        assert!(!item1.exists().unwrap());
+        assert!(item2.exists().unwrap());
+        assert!(dir_item.exists().unwrap());
     }
 
     #[test]
