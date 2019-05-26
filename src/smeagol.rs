@@ -1,6 +1,9 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use handlebars::Handlebars;
+
+use itertools::Itertools;
 
 use log::{debug, error};
 
@@ -386,6 +389,24 @@ impl Smeagol {
                                 }),
                                 children: items
                                     .iter()
+                                    .sorted_by(|a, b| {
+                                        // Unwrapping here for two reasons:
+                                        // - Error handling would be horrible
+                                        // - There should be no errors - the items have to exist
+                                        if a.is_dir().unwrap() && b.is_file().unwrap() {
+                                            Ordering::Less
+                                        } else if a.is_file().unwrap() && b.is_dir().unwrap() {
+                                            Ordering::Greater
+                                        } else {
+                                            // Unwrapping here only causes problems if it attempts
+                                            // to list the root directory.
+                                            a.path()
+                                                .filename()
+                                                .unwrap()
+                                                .bytes()
+                                                .cmp(b.path().filename().unwrap().bytes())
+                                        }
+                                    })
                                     .map(|item| -> Result<TemplateListChildData, GitError> {
                                         let link = if item.is_dir()? {
                                             format!(
