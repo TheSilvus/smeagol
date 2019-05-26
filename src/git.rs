@@ -280,9 +280,13 @@ impl<'repo> GitItem<'repo> {
         assert!(!path.is_empty());
 
         if path.segments().count() == 1 {
-            tree.remove(path.bytes())?;
-            // TODO could returning true happen earlier?
-            Ok(tree.len() == 0)
+            if tree.get(path.bytes())?.is_none() {
+                Err(GitError::NotFound)
+            } else {
+                tree.remove(path.bytes())?;
+                // TODO could returning true happen earlier?
+                Ok(tree.len() == 0)
+            }
         } else {
             let first = path.pop_first().unwrap();
 
