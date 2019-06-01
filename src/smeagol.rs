@@ -48,7 +48,7 @@ impl Smeagol {
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         self.statics()
             .or(self.edit().recover(self.handle_500_html()))
-            .or(self.edit_post().recover(self.handle_500_json()))
+            .or(self.post().recover(self.handle_500_json()))
             .or(self.list().recover(self.handle_500_html()))
             .or(self.get().recover(self.handle_500_html()))
             .with(warp::log::log("smeagol"))
@@ -278,7 +278,7 @@ impl Smeagol {
             )
     }
 
-    fn edit_post(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+    fn post(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         #[derive(Deserialize)]
         struct QueryParameters {
             commit_message: String,
