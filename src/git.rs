@@ -159,6 +159,10 @@ impl<'repo> GitItem<'repo> {
         Ok(self.object()?.kind() == Some(ObjectType::Blob))
     }
 
+    pub fn is_root(&self) -> bool {
+        self.path.bytes().len() == 0
+    }
+
     pub fn edit(&self, content: &[u8], message: &str) -> Result<(), GitError> {
         // I create quite a few objects that are discarded in case of an error during committing.
         // This could partially be prevented by walking the tree first and checking if the file
@@ -247,6 +251,13 @@ impl<'repo> GitItem<'repo> {
     }
 
     pub fn remove(&self, message: &str) -> Result<(), GitError> {
+        if self.is_root() {
+            // I decided to not allow removal of the root dir because this is only very rarely the
+            // action you want to take and it would require changing some implementation details.
+            //
+            // TODO better error
+            return Err(GitError::NotFound);
+        }
         let head = self.repo.head()?;
         let head_tree = head.tree()?;
 
@@ -529,6 +540,23 @@ mod tests {
         assert!(!item1.exists().unwrap());
         assert!(item2.exists().unwrap());
         assert!(dir_item.exists().unwrap());
+    }
+
+    #[test]
+    fn remove_only_dir_in_repo() {
+        let tmp = TempDir::new("smeagol").unwrap();
+        let repo = GitRepository::new(tmp.path()).unwrap();
+
+        let path = Path::from("test/index.md".to_string());
+        let item = repo.item(path).unwrap();
+        let dir_item = item.parent().unwrap();
+
+        item.edit("content1".as_bytes(), "Commit message").unwrap();
+        assert!(item.exists().unwrap());
+
+        dir_item.remove("Commit message").unwrap();
+        assert!(!item.exists().unwrap());
+        assert!(!dir_item.exists().unwrap());
     }
 
     #[test]
