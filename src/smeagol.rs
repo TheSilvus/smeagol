@@ -21,6 +21,9 @@ pub struct Smeagol {
     config: Arc<Config>,
 }
 impl Smeagol {
+    /// Initializes the Smeagol instance.
+    ///
+    /// This reads the config file and initializes the template engine.
     pub fn new() -> Result<Smeagol, SmeagolError> {
         debug!("Initializing");
 
@@ -39,12 +42,14 @@ impl Smeagol {
         Ok(handlebars)
     }
 
+    /// Starts serving the routes.
     pub fn start(self) -> Result<(), SmeagolError> {
         warp::serve(self.routes()).run(self.config.parse_bind()?);
 
         Ok(())
     }
 
+    /// Collects the different routes and returns a single Filter.
     fn routes(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
         self.statics()
             .or(self.edit().recover(self.handle_500_html()))
@@ -54,6 +59,12 @@ impl Smeagol {
             .with(warp::log::log("smeagol"))
     }
 
+    /// Returns an error recovery handler for use with `Filter.recover` in HTML pages.
+    ///
+    /// If the given route rejects with a `SmeagolError` the rejection is caught and replaced with
+    /// a simple error 500 page.
+    ///
+    /// For JSON endpoints `self.handle_500_json` can be used.
     fn handle_500_html(
         &self,
     ) -> impl Fn(warp::Rejection) -> Result<warp::http::Response<Vec<u8>>, Rejection> + Clone {
@@ -74,6 +85,17 @@ impl Smeagol {
             }
         }
     }
+
+    /// Returns an error recovery handler for use with `Filter.recover` in JSON endpoints.
+    ///
+    /// If the given route rejects with a `SmeagolError` the rejection is caught and replaced with
+    /// a simple error 500 value:
+    ///
+    /// ```json
+    /// { "error": "An internal error occurred." }
+    /// ```
+    ///
+    /// For HTML pages `self.handle_500_html` can be used.
     fn handle_500_json(
         &self,
     ) -> impl Fn(warp::Rejection) -> Result<warp::http::Response<Vec<u8>>, Rejection> + Clone {
@@ -95,28 +117,51 @@ impl Smeagol {
         }
     }
 
+    /// Serves all files in `./static` under `/static`. Matches only existing files.
     fn statics(&self) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         warp::get2()
             .and(warp::filters::path::path("static"))
             .and(warp::fs::dir("static/"))
     }
 
+    /// Serves an file in the repository. Matches any URL.
+    ///
+    /// If the file does not exist a 404 page is served. If the file can be created a
+    /// corresponding link is shown.
+    ///
+    /// It used the following steps to determine how the data is presented:
+    ///
+    /// 1. If a directory is selected a redirect to `config.index` is returned.
+    /// 1. If the file only contains valid UTF-8 and the filetype is not raw it is embedded within
+    ///    a page for display. `Filetype.parse` is used.
+    /// 1. If the filetype is raw and raw inline the file is shown as its own page.
+    /// 1. The file is offered for download.
     fn get(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+        /// Data for `get.html.hbs`.
         #[derive(Serialize)]
         struct TemplateGetData {
+            /// Path of the served file.
             path: String,
+            /// Link to list the directory containing the file.
             parent_list_link: String,
+            /// Content of the file.
             content: String,
+            /// Whether the file content needs to be escaped.
             safe: bool,
         }
+        /// Data for `get_not_found.hbs`.
         #[derive(Serialize)]
         struct TemplateGetNotFoundData {
+            /// Path of hte served file.
             path: String,
+            /// Whether the file can be created.
             can_exist: bool,
         }
+
         warp::get2()
             .and(
                 warp::path::full().map(|fullpath: warp::filters::path::FullPath| {
+                    // String conversion is valid because it is still percent encoded.
                     Path::from_percent_encoded(fullpath.as_str().to_string().as_bytes())
                 }),
             )
@@ -133,11 +178,11 @@ impl Smeagol {
                     match item.content() {
                         Ok(content) => {
                             let filetype = Filetype::from(&path);
-                            let raw = filetype.is_raw();
-                            // Possible: Get rid of clone
+                            // Possible: Get rid of clone?
                             let parsed_utf8 = String::from_utf8(content.clone());
 
-                            if !raw && parsed_utf8.is_ok() {
+                            // let binding not used because of additional checks
+                            if !filetype.is_raw() && parsed_utf8.is_ok() {
                                 Ok(ResponseBuilder::new().status(200).body_template(
                                     &templates,
                                     "get.html",
@@ -200,23 +245,44 @@ impl Smeagol {
             )
     }
 
+    /// Serves an edit page for a file in the repository. Matches any URL with `edit` query
+    /// parameter. Also allows uploading files.
+    ///
+    /// It does not matter whether the file exists or not. If it is empty an empty textarea is
+    /// shown. If the file cannot exist a special page is served.
+    ///
+    /// If the file is invalid UTF-8 the textarea is empty and a warning is shown.
     fn edit(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+        /// Query parameter matcher.
+        ///
+        /// The actual value of the query parameter does not matter and is never accessed. It only
+        /// matters whether it is given (`?edit`, `?edit=`, `?edit=abc`).
         #[derive(Deserialize)]
         struct QueryParameters {
             // This field is never accessed but is required for the tag
             #[allow(dead_code)]
             edit: String,
         }
-        #[derive(Serialize)]
-        struct TemplateCannotExistData {
-            path: String,
-        }
+
+        /// Data for `edit.html.hbs`.
         #[derive(Serialize)]
         struct TemplateEditData<'a> {
+            /// Path of the edited file.
             path: String,
+            /// Content of the edited file. It is empty and ignored if `is_valid` is false.
             content: String,
+            /// Whether the content of the file is valid UTF-8.
+            ///
+            /// If not, a warning is shown above the text area.
             is_valid: bool,
+            // TODO replace config with used parameters
             config: &'a Config,
+        }
+        /// Data for `edit_cannot_exist.html.hbs`.
+        #[derive(Serialize)]
+        struct TemplateCannotExistData {
+            /// Path of the edited file.
+            path: String,
         }
         warp::get2()
             .and(
@@ -278,15 +344,25 @@ impl Smeagol {
             )
     }
 
+    /// Edits or creates a file in the repository. Matches any URL.
+    ///
+    /// Requires a query paramater `commit_message`. File content is in request body.
     fn post(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+        /// Query paramter matcher.
         #[derive(Deserialize)]
         struct QueryParameters {
             commit_message: String,
         }
+        /// Data returned if the edit was successful.
+        ///
+        /// Contains the path of the edited/created file.
         #[derive(Serialize)]
         struct EditSuccessData {
             path: String,
         }
+        /// Data returned if an error occurred during the edit.
+        ///
+        /// Contains an error message.
         #[derive(Serialize)]
         struct EditErrorData {
             error: String,
@@ -333,24 +409,43 @@ impl Smeagol {
                 },
             )
     }
+    /// Serves a page listing all files in a directory. Matches any URL with a `list` query
+    /// paramter.
+    ///
+    /// If the directory does not exist a 404 page is served. If the path points to a file a
+    /// redirect is added.
+    ///
+    /// Directories are sorted first.
     fn list(&self) -> impl Filter<Extract = impl Reply, Error = warp::Rejection> + Clone {
+        /// Query parameter matcher.
+        ///
+        /// The actual value of the query parameter does not matter and is never accessed. It only
+        /// matters whether it is given (`?list`, `?list=`, `?list=abc`).
         #[derive(Deserialize)]
         struct QueryParameters {
             // This field is never accessed but is required for the tag
             #[allow(dead_code)]
             list: String,
         }
+        /// Data for `list.html.hbs`.
         #[derive(Serialize)]
         struct TemplateListData {
+            /// Path of the listed directory.
             path: String,
+            /// Link to the parent directory if it exist (the listed directory is not the root).
             parent_list_link: Option<String>,
+            /// List of all the items in the directory.
             children: Vec<TemplateListChildData>,
         }
+        /// A list item.
         #[derive(Serialize)]
         struct TemplateListChildData {
+            /// Link to the item.
             link: String,
+            /// Name of the item.
             name: String,
         }
+        /// Data for `list_not_found.html.hbs`.
         #[derive(Serialize)]
         struct TemplateListNotFoundData {
             path: String,
@@ -390,16 +485,17 @@ impl Smeagol {
                                 children: items
                                     .iter()
                                     .sorted_by(|a, b| {
-                                        // Unwrapping here for two reasons:
-                                        // - Error handling would be horrible
-                                        // - There should be no errors - the items have to exist
+                                        // Error handling instead of unwrap would be preferable but
+                                        // horrible in this situation. There should be no errors
+                                        // anyways; the files have to exist (the only reasonable
+                                        // error source).
                                         if a.is_dir().unwrap() && b.is_file().unwrap() {
                                             Ordering::Less
                                         } else if a.is_file().unwrap() && b.is_dir().unwrap() {
                                             Ordering::Greater
                                         } else {
-                                            // Unwrapping here only causes problems if it attempts
-                                            // to list the root directory.
+                                            // Unwrap because the root cannot be one of the listed
+                                            // items.
                                             a.path()
                                                 .filename()
                                                 .unwrap()
@@ -430,6 +526,7 @@ impl Smeagol {
                                             .build_lossy(),
                                         })
                                     })
+                                    // A list of results can be collected to a result of a list.
                                     .collect::<Result<Vec<_>, _>>()?,
                             },
                         )?),
@@ -449,11 +546,13 @@ impl Smeagol {
             )
     }
 
+    /// Returns a filter that returns the template handler for use with `.and`.
     fn templates(&self) -> impl Filter<Extract = (Arc<Handlebars>,), Error = Rejection> + Clone {
         let handlebars = self.handlebars.clone();
         warp::any()
             .and_then(move || -> Result<Arc<Handlebars>, Rejection> { Ok(handlebars.clone()) })
     }
+    /// Returns a filter that returns the config for use with `.and`.
     fn config(&self) -> impl Filter<Extract = (Arc<Config>,), Error = Rejection> + Clone {
         let config = self.config.clone();
         warp::any().and_then(move || -> Result<Arc<Config>, Rejection> { Ok(config.clone()) })
